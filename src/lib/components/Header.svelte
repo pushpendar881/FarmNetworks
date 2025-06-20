@@ -1,10 +1,15 @@
 <script>
     import { user } from '../stores/dashboard.js';
+    import { goto } from '$app/navigation';
     
     export let title = 'Dashboard';
     
     function showNotifications() {
         alert('Notifications:\n\n• 3 devices need recharge within 5 days\n• New master installation request\n• Monthly earnings report available');
+    }
+    
+    function navigateToProfile() {
+        goto('/seller/portal/profile');
     }
 </script>
 
@@ -18,7 +23,9 @@
                     <span class="notification-badge">{$user.notifications}</span>
                 {/if}
             </button>
-            <div class="user-avatar">{$user.initials}</div>
+            <button class="user-avatar" on:click={navigateToProfile} title="Go to Profile">
+                {$user.initials}
+            </button>
         </div>
     </div>
 </header>
@@ -60,6 +67,12 @@
         border-radius: 50%;
         cursor: pointer;
         font-size: 16px;
+        transition: all 0.3s ease;
+    }
+
+    .notifications:hover {
+        background: #5a67d8;
+        transform: scale(1.05);
     }
 
     .notification-badge {
@@ -87,5 +100,13 @@
         justify-content: center;
         color: white;
         font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .user-avatar:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
     }
 </style>

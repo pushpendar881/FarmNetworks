@@ -71,7 +71,7 @@
           title: 'Login Successful',
           message: 'Welcome to Admin Portal!'
         });
-        goto('/seller/authdone/dashboard');
+        goto('/seller/portal/dashboard');
       }
     } catch (err) {
       addToast({
