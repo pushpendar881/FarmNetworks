@@ -1,232 +1,214 @@
 <script>
-  import { authStore, user } from '$lib/stores/auth.js';
+  import { authStore, loading } from '$lib/stores/auth.js';
   import { addToast } from '$lib/stores/toast.js';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
   import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
-    
+
   let email = '';
   let password = '';
-  let loading = false;
-  let showPassword = false;
-  let errorMessage = '';
+  let rememberMe = false;
+  let isSubmitting = false;
+  let showResendButton = false;
+  let resendMessage = '';
 
-  // onMount(() => {
-  //   if ($user) {
-  //     goto('/seller/dashboard');
-  //   }
-  // });
-
-  function navigateBack() {
-    goto('/', {replaceState: true});
-  }
-
-  function togglePasswordVisibility() {
-    showPassword = !showPassword;
-  }
-
-  function clearError() {
-    errorMessage = '';
-  }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    loading = true;
-    clearError();
-
-    // Basic validation
-    if (!email.trim() || !password.trim()) {
-      errorMessage = "Please fill in all required fields";
-      loading = false;
-      return;
-    }
-
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      errorMessage = "Please enter a valid email address";
-      loading = false;
-      return;
-    }
-
-    // Password length validation - FIXED
-    if (password.length < 6) {
-      errorMessage = "Password must be at least 6 characters long";
-      loading = false;
-      return;
-    }
-
-    try {
-      const { data, error } = await authStore.signIn(email, password);
-      
-      if (error) {
-        addToast({
-          type: 'error',
-          title: 'Login Failed',
-          message: error.message
-        });
-      } else {
-        addToast({
-          type: 'success',
-          title: 'Login Successful',
-          message: 'Welcome to Admin Portal!'
-        });
-        goto('/seller/portal/dashboard');
+  const handleSubmit = async () => {
+      if (!email || !password) {
+          addToast('Please fill in all fields', 'error');
+          return;
       }
-    } catch (err) {
-      addToast({
-        type: 'error',
-        title: 'Login Error',
-        message: 'An unexpected error occurred'
-      });
-    } finally {
-      loading = false;
-    }
-  }
+
+      isSubmitting = true;
+      showResendButton = false;
+      resendMessage = '';
+
+      try {
+          const result = await authStore.signIn(email, password);
+
+          if (result.success) {
+              addToast('Welcome back!', 'success');
+              
+              // Redirect based on role
+              if (result.role === 'admin') {
+                  goto('/admin/dashboard');
+              } else if (result.role === 'seller') {
+                  goto('/seller/protected/dashboard');
+              } else {
+                  goto('/dashboard'); // fallback
+              }
+          } else {
+              // Handle specific error cases
+              if (result.code === 'EMAIL_NOT_CONFIRMED') {
+                  addToast('Please confirm your email address before signing in', 'error');
+                  showResendButton = true;
+              } else if (result.code === 'INVALID_CREDENTIALS') {
+                  addToast('Invalid email or password. Please check your credentials.', 'error');
+              } else if (result.code === 'RATE_LIMITED') {
+                  addToast('Too many login attempts. Please wait a moment and try again.', 'error');
+              } else {
+                  addToast(result.error || 'Login failed', 'error');
+              }
+          }
+      } catch (error) {
+          console.error('Login error:', error);
+          addToast('An unexpected error occurred', 'error');
+      } finally {
+          isSubmitting = false;
+      }
+  };
+
+  const resendConfirmation = async () => {
+      if (!email) {
+          addToast('Please enter your email address first', 'error');
+          return;
+      }
+
+      try {
+          const result = await authStore.resendConfirmation(email);
+          
+          if (result.success) {
+              resendMessage = 'Confirmation email sent! Please check your inbox and spam folder.';
+              addToast('Confirmation email sent!', 'success');
+              showResendButton = false;
+          } else {
+              addToast(result.error || 'Failed to resend confirmation email', 'error');
+          }
+      } catch (error) {
+          addToast('Failed to resend confirmation email', 'error');
+      }
+  };
 </script>
 
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-purple-500 to-indigo-600">
-  <div class="container mx-auto px-6">
-    <button 
-      on:click={navigateBack}
-      class="mb-8 bg-white/20 text-white border-0 hover:bg-white/30 px-4 py-2 rounded-md flex items-center transition-all duration-300 hover:scale-105"
-      disabled={loading}
-    >
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
-      Back to Portal Selection
-    </button>
+<svelte:head>
+  <title>Seller Login - Farm Networks</title>
+</svelte:head>
 
-    <div class="max-w-md mx-auto glass-card bg-white/10 backdrop-blur-lg rounded-xl shadow-2xl border border-white/20 animate-fade-in">
-      <div class="text-center p-6 pb-0">
-        <div class="mx-auto w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
-          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <h2 class="text-2xl font-bold text-white mb-2">Seller Portal Access</h2>
-
-      </div>
-      
-      <div class="p-6">
-        {#if errorMessage}
-          <div class="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-lg text-red-100 flex items-start">
-            <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <p class="font-medium">Login Error</p>
-              <p class="text-sm">{errorMessage}</p>
-            </div>
-            <button on:click={clearError} class="ml-auto text-red-200 hover:text-white" aria-label="Clear error">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+<div class="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-8">
+      <div>
+          <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-green-100">
+              <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
-            </button>
           </div>
-        {/if}
+          <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              Seller Login
+          </h2>
+          <p class="mt-2 text-center text-sm text-gray-600">
+              Sign in to your seller account
+          </p>
+      </div>
 
-        <form on:submit={handleLogin} class="space-y-6">
-          <!-- Email Input -->
-          <div class="space-y-2">
-            <label for="email" class="block text-sm font-medium text-white/90">
-              Administrator Email
-            </label>
-            <input
-              id="email"
-              placeholder="admin@devicenet.com"
-              type="email"
-              bind:value={email}
-              class="w-full px-4 py-3 bg-white/90 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300"
-              required
-              disabled={loading}
-            />
+      <form class="mt-8 space-y-6" on:submit|preventDefault={handleSubmit}>
+          <div class="space-y-4">
+              <div>
+                  <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                  <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      bind:value={email}
+                      required
+                      class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter your email"
+                  />
+              </div>
+
+              <div>
+                  <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                  <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      bind:value={password}
+                      required
+                      class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-green-500 focus:border-green-500"
+                      placeholder="Enter your password"
+                  />
+              </div>
+
+              <div class="flex items-center justify-between">
+                  <div class="flex items-center">
+                      <input
+                          id="rememberMe"
+                          name="rememberMe"
+                          type="checkbox"
+                          bind:checked={rememberMe}
+                          class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                      />
+                      <label for="rememberMe" class="ml-2 block text-sm text-gray-900">
+                          Remember me
+                      </label>
+                  </div>
+
+                  <div class="text-sm">
+                      <a href="/seller/auth/forgot-password" class="font-medium text-green-600 hover:text-green-500">
+                          Forgot your password?
+                      </a>
+                  </div>
+              </div>
           </div>
 
-          <!-- Password Input -->
-          <div class="space-y-2">
-            <label for="password" class="block text-sm font-medium text-white/90">
-              Secure Password
-            </label>
-            <div class="relative">
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                bind:value={password}
-                class="w-full px-4 py-3 pr-12 bg-white/90 border border-white/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-300"
-                placeholder="Enter admin password"
-                required
-                disabled={loading}
-              />
+        
+          {#if resendMessage}
+              <div class="rounded-md bg-green-50 p-4">
+                  <div class="flex">
+                      <div class="flex-shrink-0">
+                          <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                      </div>
+                      <div class="ml-3">
+                          <p class="text-sm font-medium text-green-800">
+                              {resendMessage}
+                          </p>
+                          <p class="text-xs text-green-600 mt-1">
+                              Check your spam folder if you don't see the email.
+                          </p>
+                      </div>
+                  </div>
+              </div>
+          {/if}
+
+          <div>
               <button
-                type="button"
-                on:click={togglePasswordVisibility}
-                class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                disabled={loading}
-                tabindex="-1"
+                  type="submit"
+                  disabled={isSubmitting || $loading}
+                  class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {#if showPassword}
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                  </svg>
-                {:else}
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                {/if}
+                  {#if isSubmitting || $loading}
+                      <LoadingSpinner size="small" />
+                      Signing in...
+                  {:else}
+                      Sign in
+                  {/if}
               </button>
-            </div>
           </div>
 
-          <button 
-            type="submit" 
-            class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 py-4 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:transform-none shadow-lg"
-            disabled={loading}
-          >
-            {#if loading}
-              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Authenticating...
-            {:else}
-              🔐 SECURE LOGIN
-            {/if}
-          </button>
+          
+          {#if showResendButton}
+              <div class="text-center">
+                  <button
+                      type="button"
+                      on:click={resendConfirmation}
+                      class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 7.89a2 2 0 002.83 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Resend Confirmation Email
+                  </button>
+              </div>
+          {/if}
 
-          <div class="text-center space-y-2 text-sm text-white/70">
-            <p>Create your FarmNetwork Sellers <a href="/seller/auth/singup" class="text-lg underline">Account</a></p>
+          <div class="text-center">
+              <p class="text-sm text-gray-600">
+                  Don't have an account?
+                  <a href="/seller/auth/signup" class="font-medium text-green-600 hover:text-green-500">
+                      Sign up here
+                  </a>
+              </p>
           </div>
-        </form>
-      </div>
-    </div>
-    
-    <!-- Demo credentials hint -->
-   
+      </form>
   </div>
 </div>
 
-<style>
-  .glass-card {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-  
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  
-  .animate-fade-in {
-    animation: fade-in 0.6s ease-out;
-  }
-</style>
