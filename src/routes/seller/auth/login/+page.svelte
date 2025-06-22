@@ -31,7 +31,7 @@
               if (result.role === 'admin') {
                   goto('/admin/dashboard');
               } else if (result.role === 'seller') {
-                  goto('/seller/protected/dashboard');
+                  goto('/seller/portal/dashboard');
               } else {
                   goto('/dashboard'); // fallback
               }

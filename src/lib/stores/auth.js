@@ -1,6 +1,7 @@
-
+// src/lib/stores/auth.js (fixed version)
 import { writable, derived } from 'svelte/store'
-import { supabase, authHelpers } from '$lib/supabase.js'
+import { supabase, authHelpers, PUBLIC_SUPABASE_URL } from '$lib/supabase.js'
+import { browser } from '$app/environment'
 
 // Auth state stores
 export const user = writable(null)
@@ -15,6 +16,8 @@ export const isSeller = derived(userType, ($userType) => $userType === 'seller')
 
 // Initialize auth state
 export const initializeAuth = async () => {
+  if (!browser || !supabase) return;
+  
   loading.set(true)
   
   try {
@@ -24,6 +27,26 @@ export const initializeAuth = async () => {
       session.set(currentSession)
       user.set(currentSession.user)
     }
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        console.log('Auth state changed:', event)
+        
+        if (currentSession) {
+          session.set(currentSession)
+          user.set(currentSession.user)
+        } else {
+          session.set(null)
+          user.set(null)
+        }
+        
+        loading.set(false)
+      }
+    )
+
+    // Return cleanup function
+    return () => subscription.unsubscribe()
   } catch (error) {
     console.error('Error initializing auth:', error)
   } finally {
@@ -34,6 +57,8 @@ export const initializeAuth = async () => {
 export const authStore = {
   // Enhanced Sign In with better error handling
   signIn: async (email, password) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     loading.set(true);
     try {
       // Normalize email input
@@ -101,6 +126,8 @@ export const authStore = {
 
   // Debug function to check if user exists
   checkUserExists: async (email) => {
+    if (!supabase) return { exists: false, message: 'Supabase not initialized' };
+    
     try {
       const normalizedEmail = email.trim().toLowerCase();
       console.log('🔍 Checking if user exists:', normalizedEmail);
@@ -127,41 +154,10 @@ export const authStore = {
     }
   },
 
-  // Create a test user function for debugging
-  createTestUser: async (email, password) => {
-    loading.set(true);
-    try {
-      console.log('🧪 Creating test user:', email);
-      
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            user_type: 'seller',
-            full_name: 'Test User',
-            business_name: 'Test Business',
-            phone: '1234567890'
-          }
-        }
-      });
-
-      console.log('Test user creation response:', { 
-        hasUser: !!data?.user,
-        error: error?.message 
-      });
-
-      if (error) return { success: false, error: error.message };
-      return { success: true, data };
-    } catch (err) {
-      return { success: false, error: err.message };
-    } finally {
-      loading.set(false);
-    }
-  },
-
   // Signup Seller (with user_type: 'seller')
   signupSeller: async (formData) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     loading.set(true);
     try {
       console.log('👤 Creating seller account:', formData.email);
@@ -223,6 +219,8 @@ export const authStore = {
 
   // Signup Admin (with user_type: 'admin')
   signupAdmin: async (formData) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     loading.set(true);
     try {
       console.log('👑 Creating admin account:', formData.email);
@@ -254,6 +252,8 @@ export const authStore = {
 
   // Sign Out
   signOut: async () => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     loading.set(true);
     try {
       console.log('👋 Signing out...');
@@ -272,22 +272,68 @@ export const authStore = {
       }
       
       // Clear any additional browser storage if needed
-      if (typeof window !== 'undefined') {
-        // Clear localStorage items related to auth
-        localStorage.removeItem('supabase.auth.token');
-        localStorage.removeItem('sb-' + PUBLIC_SUPABASE_URL.split('//')[1].split('.')[0] + '-auth-token');
+      if (browser) {
+        // Clear all Supabase-related localStorage items
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('supabase') || key.includes('sb-') || key.includes('auth'))) {
+            keysToRemove.push(key);
+          }
+        }
         
-        // Clear sessionStorage items
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+          console.log('Removed localStorage key:', key);
+        });
+        
+        // Clear sessionStorage completely
         sessionStorage.clear();
         
         // Clear any custom app data
         localStorage.removeItem('user-preferences');
         localStorage.removeItem('dashboard-data');
-        // Add any other localStorage keys your app uses
+        
+        // Clear all cookies related to Supabase
+        const clearAllCookies = () => {
+          const cookies = document.cookie.split(';');
+          cookies.forEach(cookie => {
+            const eqPos = cookie.indexOf('=');
+            const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+            
+            // Remove cookies that might be related to auth or Supabase
+            if (name.includes('supabase') || 
+                name.includes('auth') || 
+                name.includes('session') || 
+                name.includes('token') ||
+                name.includes('sb-')) {
+              
+              // Remove cookie for current domain
+              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+              
+              // Also try to remove for subdomain
+              document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+              
+              // And for root domain
+              const domainParts = window.location.hostname.split('.');
+              if (domainParts.length > 1) {
+                const rootDomain = domainParts.slice(-2).join('.');
+                document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${rootDomain};`;
+              }
+              
+              console.log('Removed cookie:', name);
+            }
+          });
+        };
+        
+        clearAllCookies();
+        
+        // Force clear any remaining auth state by reloading the page
+        // This ensures all auth state is completely cleared
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 100);
       }
-      
-      // Force refresh auth state
-      await supabase.auth.getSession();
       
       console.log('✅ Signed out successfully and cleared all data');
       return { success: true };
@@ -300,10 +346,15 @@ export const authStore = {
       user.set(null);
       
       // Clear browser storage anyway
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('supabase.auth.token');
-        localStorage.removeItem('sb-' + PUBLIC_SUPABASE_URL.split('//')[1].split('.')[0] + '-auth-token');
+      if (browser) {
+        // Clear all localStorage items
+        localStorage.clear();
         sessionStorage.clear();
+        
+        // Force redirect to home page
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 100);
       }
       
       return { success: false, error: err.message };
@@ -314,6 +365,8 @@ export const authStore = {
 
   // Reset Password
   resetPassword: async (email) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     try {
       const { data, error } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(), 
@@ -330,6 +383,8 @@ export const authStore = {
 
   // Resend confirmation email
   resendConfirmation: async (email) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
@@ -347,6 +402,8 @@ export const authStore = {
 
   // Get current user profile
   getCurrentUserProfile: async () => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
       

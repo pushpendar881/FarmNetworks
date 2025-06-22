@@ -1,6 +1,8 @@
 <script>
     import { currentPage } from '../stores/dashboard.js';
     import { page } from '$app/stores';
+    import { authStore } from '../stores/auth.js';
+    import { goto } from '$app/navigation';
     
     const menuItems = [
         { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/seller/portal/dashboard' },
@@ -8,11 +10,29 @@
         { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/seller/portal/map' },
         { id: 'settings', icon: '⚙️', label: 'Settings', href: '/seller/portal/settings' },
         { id: 'support', icon: '📞', label: 'Support', href: '/seller/portal/support' },
-        { id: 'logout', icon: '🚪', label: 'Logout', href: '/seller/auth/login' }
+        { id: 'logout', icon: '🚪', label: 'Logout', action: 'logout' }
     ];
     
     function isActive(href) {
         return $page.url.pathname === href;
+    }
+    
+    async function handleLogout() {
+        try {
+            await authStore.signOut();
+            // The signOut function will handle the redirect automatically
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Fallback redirect
+            goto('/seller/auth/login');
+        }
+    }
+    
+    function handleItemClick(item) {
+        if (item.action === 'logout') {
+            handleLogout();
+        }
+        // For other items, let the default link behavior handle navigation
     }
 </script>
 
@@ -24,15 +44,26 @@
     <ul class="nav-menu">
         {#each menuItems as item}
             <li class="nav-item">
-                <a 
-                    href={item.href} 
-                    class="nav-link" 
-                    class:active={isActive(item.href)}
-                    data-sveltekit-preload-data="hover"
-                >
-                    <span class="nav-icon">{item.icon}</span>
-                    <span>{item.label}</span>
-                </a>
+                {#if item.action === 'logout'}
+                    <button 
+                        on:click={handleLogout}
+                        class="nav-link logout-button" 
+                        type="button"
+                    >
+                        <span class="nav-icon">{item.icon}</span>
+                        <span>{item.label}</span>
+                    </button>
+                {:else}
+                    <a 
+                        href={item.href} 
+                        class="nav-link" 
+                        class:active={isActive(item.href)}
+                        data-sveltekit-preload-data="hover"
+                    >
+                        <span class="nav-icon">{item.icon}</span>
+                        <span>{item.label}</span>
+                    </a>
+                {/if}
             </li>
         {/each}
     </ul>
@@ -89,12 +120,23 @@
         text-decoration: none;
         transition: all 0.3s ease;
         border-left: 3px solid transparent;
+        width: 100%;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: inherit;
     }
 
     .nav-link:hover, .nav-link.active {
         background: rgba(255, 255, 255, 0.1);
         color: white;
         border-left-color: #00ff88;
+    }
+
+    .logout-button:hover {
+        background: rgba(255, 59, 48, 0.2);
+        border-left-color: #ff3b30;
     }
 
     .nav-icon {

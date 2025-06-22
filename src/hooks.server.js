@@ -77,9 +77,9 @@ export const handle = async ({ event, resolve }) => {
     }
 
     // Redirect from root to seller login (or you could show a landing page)
-    if (pathname === '/') {
-      throw redirect(303, '/seller/auth/login')
-    }
+    // if (pathname === '/') {
+    //   throw redirect(303, '/seller/auth/login')
+    // }
   }
 
   return resolve(event, {

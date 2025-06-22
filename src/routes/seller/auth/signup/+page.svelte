@@ -347,14 +347,14 @@
                 </button>
             </div>
 
-            <div class="text-center">
+            <!-- <div class="text-center">
                 <p class="text-sm text-gray-600">
                     Already have an account?
                     <a href="/seller/auth/login" class="font-medium text-green-600 hover:text-green-500">
                         Sign in here
                     </a>
                 </p>
-            </div>
+            </div> -->
         </form>
     </div>
 </div>
