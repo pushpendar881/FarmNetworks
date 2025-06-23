@@ -204,6 +204,7 @@ export const authStore = {
         return { success: false, error: error.message };
       }
       
+      
       return { 
         success: true, 
         data,
@@ -406,6 +407,7 @@ export const authStore = {
     
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
+      console.log(user);
       
       if (error || !user) {
         return { success: false, error: 'No authenticated user' };
@@ -426,18 +428,293 @@ export const authStore = {
         
         return { success: true, profile: data, userType: 'admin' };
       } else {
-        const { data, error: profileError } = await supabase
-          .from('seller_profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-          
-        if (profileError) {
-          return { success: false, error: profileError.message };
-        }
+        // const { data, error: profileError } = await supabase
+        //   .from('seller_profiles')
+        //   .select('*')
+        //   .eq('id', user.id)
+        //   .single();
+        //   console.log(data)
+        // if (profileError) {
+        //   return { success: false, error: profileError.message };
+        // }
         
-        return { success: true, profile: data, userType: 'seller' };
+        return { success: true, profile: { ...user.user_metadata, ...user }, userType: 'seller' };
       }
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Get seller profile by ID (for admin use)
+  getSellerProfile: async (sellerId) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      // First get the user profile data
+      const { data: userProfile, error: userError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', sellerId)
+        .eq('role', 'seller')
+        .single();
+        
+      if (userError) {
+        return { success: false, error: userError.message };
+      }
+      
+      // Then get the seller profile data
+      const { data: sellerProfile, error: sellerError } = await supabase
+        .from('seller_profiles')
+        .select('*')
+        .eq('id', sellerId)
+        .single();
+        
+      if (sellerError) {
+        return { success: false, error: sellerError.message };
+      }
+      
+      // Combine the data
+      const combinedProfile = {
+        ...userProfile,
+        ...sellerProfile
+      };
+      
+      return { success: true, profile: combinedProfile };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Get all seller profiles (for admin use)
+  getAllSellerProfiles: async (options = {}) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search = '',
+        status = 'all',
+        sortBy = 'created_at',
+        sortOrder = 'desc'
+      } = options;
+      
+      let query = supabase
+        .from('user_profiles')
+        .select(`
+          *,
+          seller_profiles (
+            business_name,
+            business_type,
+            address,
+            city,
+            state,
+            pincode,
+            gstin,
+            commission_rate,
+            total_sales,
+            rating,
+            created_by,
+            approved_by,
+            approved_at,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('role', 'seller');
+      
+      // Add search filter
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,seller_profiles.business_name.ilike.%${search}%`);
+      }
+      
+      // Add status filter
+      if (status !== 'all') {
+        query = query.eq('is_active', status === 'active');
+      }
+      
+      // Add sorting
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      
+      // Add pagination
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+      
+      const { data, error, count } = await query;
+      
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      // Transform the data to flatten the nested seller_profiles
+      const transformedData = data.map(item => ({
+        ...item,
+        ...item.seller_profiles,
+        seller_profiles: undefined // Remove the nested object
+      }));
+      
+      return { 
+        success: true, 
+        sellers: transformedData,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Get seller statistics (for admin dashboard)
+  getSellerStatistics: async () => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      // Get total sellers count
+      const { count: totalSellers, error: countError } = await supabase
+        .from('user_profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'seller');
+        
+      if (countError) {
+        return { success: false, error: countError.message };
+      }
+      
+      // Get active sellers count
+      const { count: activeSellers, error: activeError } = await supabase
+        .from('user_profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'seller')
+        .eq('is_active', true);
+        
+      if (activeError) {
+        return { success: false, error: activeError.message };
+      }
+      
+      // Get total sales from all sellers
+      const { data: salesData, error: salesError } = await supabase
+        .from('seller_profiles')
+        .select('total_sales');
+        
+      if (salesError) {
+        return { success: false, error: salesError.message };
+      }
+      
+      const totalSales = salesData.reduce((sum, seller) => sum + (seller.total_sales || 0), 0);
+      
+      // Get average rating
+      const { data: ratingData, error: ratingError } = await supabase
+        .from('seller_profiles')
+        .select('rating');
+        
+      if (ratingError) {
+        return { success: false, error: ratingError.message };
+      }
+      
+      const validRatings = ratingData.filter(seller => seller.rating > 0);
+      const averageRating = validRatings.length > 0 
+        ? validRatings.reduce((sum, seller) => sum + seller.rating, 0) / validRatings.length 
+        : 0;
+      
+      return {
+        success: true,
+        statistics: {
+          totalSellers: totalSellers || 0,
+          activeSellers: activeSellers || 0,
+          inactiveSellers: (totalSellers || 0) - (activeSellers || 0),
+          totalSales: totalSales,
+          averageRating: Math.round(averageRating * 100) / 100
+        }
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Update seller profile
+  updateSellerProfile: async (sellerId, updateData) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      // Update user_profiles table
+      console.log(sellerId);
+      console.log(updateData);
+      const userUpdateData = {
+        full_name: updateData.full_name,
+        phone: updateData.phone,
+        is_active: updateData.is_active,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { error: userError } = await supabase
+        .from('user_profiles')
+        .update(userUpdateData)
+        .eq('id', sellerId);
+        
+      if (userError) {
+        return { success: false, error: userError.message };
+      }
+      
+      // Update seller_profiles table
+      const sellerUpdateData = {
+        business_name: updateData.business_name,
+        business_type: updateData.business_type,
+        address: updateData.address,
+        city: updateData.city,
+        state: updateData.state,
+        pincode: updateData.pincode,
+        gstin: updateData.gstin,
+        commission_rate: updateData.commission_rate,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { error: sellerError } = await supabase
+        .from('seller_profiles')
+        .update(sellerUpdateData)
+        .eq('id', sellerId);
+        
+      if (sellerError) {
+        return { success: false, error: sellerError.message };
+      }
+      
+      return { success: true, message: 'Seller profile updated successfully' };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  // Approve/Reject seller
+  approveSeller: async (sellerId, approved, adminId) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const updateData = {
+        is_active: approved,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (approved) {
+        updateData.approved_by = adminId;
+        updateData.approved_at = new Date().toISOString();
+      }
+      
+      const { error } = await supabase
+        .from('seller_profiles')
+        .update(updateData)
+        .eq('id', sellerId);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        message: approved ? 'Seller approved successfully' : 'Seller rejected successfully' 
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }
