@@ -1,6 +1,6 @@
-// src/lib/stores/auth.js (fixed version)
+// NEW: Get user statistics (for admin dashboard)
 import { writable, derived } from 'svelte/store'
-import { supabase, authHelpers, PUBLIC_SUPABASE_URL } from '$lib/supabase.js'
+import { supabase, authHelpers} from '$lib/supabase.js'
 import { browser } from '$app/environment'
 
 // Auth state stores
@@ -10,9 +10,10 @@ export const loading = writable(true)
 
 // Derived stores
 export const isAuthenticated = derived(user, ($user) => !!$user)
-export const userType = derived(user, ($user) => $user?.user_metadata?.user_type || 'seller')
+export const userType = derived(user, ($user) => $user?.user_metadata?.user_type || 'user')
 export const isAdmin = derived(userType, ($userType) => $userType === 'admin')
 export const isSeller = derived(userType, ($userType) => $userType === 'seller')
+export const isUser = derived(userType, ($userType) => $userType === 'user')
 
 // Initialize auth state
 export const initializeAuth = async () => {
@@ -61,12 +62,10 @@ export const authStore = {
     
     loading.set(true);
     try {
-      // Normalize email input
       const normalizedEmail = email.trim().toLowerCase();
       
       console.log('🔐 Attempting login...');
       console.log('Email (normalized):', normalizedEmail);
-      console.log('Password length:', password.length);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
@@ -82,7 +81,6 @@ export const authStore = {
       if (error) {
         console.error('❌ Auth Error:', error);
         
-        // Handle specific error types
         switch (error.message) {
           case 'Invalid login credentials':
             return { 
@@ -109,7 +107,7 @@ export const authStore = {
       }
 
       const authUser = data.user;
-      const role = authUser?.user_metadata?.user_type || 'unknown';
+      const role = authUser?.user_metadata?.user_type || 'user';
       
       console.log('✅ Login successful!');
       console.log('User role:', role);
@@ -124,7 +122,7 @@ export const authStore = {
     }
   },
 
-  // Debug function to check if user exists
+  // Check if user exists in user_profiles table
   checkUserExists: async (email) => {
     if (!supabase) return { exists: false, message: 'Supabase not initialized' };
     
@@ -132,21 +130,21 @@ export const authStore = {
       const normalizedEmail = email.trim().toLowerCase();
       console.log('🔍 Checking if user exists:', normalizedEmail);
       
-      // Check if user exists in seller_profiles table
       const { data, error } = await supabase
-        .from('seller_profiles')
-        .select('email')
+        .from('user_profiles')
+        .select('email, role')
         .eq('email', normalizedEmail)
         .single();
       
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      if (error && error.code !== 'PGRST116') {
         console.error('Error checking user:', error);
         return { exists: false, message: 'Error checking user existence' };
       }
       
       return { 
         exists: !!data, 
-        message: data ? 'User found in database' : 'No user found with this email' 
+        role: data?.role,
+        message: data ? `User found with role: ${data.role}` : 'No user found with this email' 
       };
     } catch (err) {
       console.error('Error checking user:', err);
@@ -154,7 +152,64 @@ export const authStore = {
     }
   },
 
-  // Signup Seller (with user_type: 'seller')
+  // Signup User (regular user)
+  signupUser: async (formData) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    loading.set(true);
+    try {
+      console.log('👤 Creating user account:', formData.email);
+      
+      if (!formData.email || !formData.password || !formData.fullName) {
+        return { 
+          success: false, 
+          error: 'Email, password, and full name are required' 
+        };
+      }
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            user_type: 'user',
+            full_name: formData.fullName,
+            phone: formData.phone || '',
+            username: formData.username || ''
+          }
+        }
+      });
+  
+      console.log('User signup response:', { 
+        hasUser: !!data?.user,
+        needsConfirmation: !data?.session,
+        error: error?.message 
+      });
+  
+      if (error) {
+        if (error.message.includes('User already registered')) {
+          return { 
+            success: false, 
+            error: 'An account with this email already exists. Please sign in instead.' 
+          };
+        }
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        data,
+        needsConfirmation: !data?.session
+      };
+    } catch (err) {
+      console.error('User signup error:', err);
+      return { success: false, error: err.message };
+    } finally {
+      loading.set(false);
+    }
+  },
+
+  // Signup Seller
   signupSeller: async (formData) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
@@ -162,7 +217,6 @@ export const authStore = {
     try {
       console.log('👤 Creating seller account:', formData.email);
       
-      // Validate required fields
       if (!formData.email || !formData.password || !formData.fullName) {
         return { 
           success: false, 
@@ -179,10 +233,7 @@ export const authStore = {
             full_name: formData.fullName,
             business_name: formData.businessName || '',
             phone: formData.phone || '',
-            address: formData.address || '',
-            city: formData.city || '',
-            state: formData.state || '',
-            pincode: formData.pincode || ''
+            username: formData.username || ''
           }
         }
       });
@@ -194,7 +245,6 @@ export const authStore = {
       });
   
       if (error) {
-        // Handle specific signup errors
         if (error.message.includes('User already registered')) {
           return { 
             success: false, 
@@ -204,11 +254,10 @@ export const authStore = {
         return { success: false, error: error.message };
       }
       
-      
       return { 
         success: true, 
         data,
-        needsConfirmation: !data?.session // User needs to confirm email if no session
+        needsConfirmation: !data?.session
       };
     } catch (err) {
       console.error('Seller signup error:', err);
@@ -218,7 +267,7 @@ export const authStore = {
     }
   },
 
-  // Signup Admin (with user_type: 'admin')
+  // Signup Admin
   signupAdmin: async (formData) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
@@ -232,7 +281,9 @@ export const authStore = {
         options: {
           data: {
             user_type: 'admin',
-            full_name: formData.fullName
+            full_name: formData.fullName,
+            phone: formData.phone || '',
+            username: formData.username || ''
           }
         }
       });
@@ -251,7 +302,7 @@ export const authStore = {
     }
   },
 
-  // Sign Out
+  // Sign Out (unchanged)
   signOut: async () => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
@@ -259,22 +310,16 @@ export const authStore = {
     try {
       console.log('👋 Signing out...');
       
-      // Clear local state first
       session.set(null);
       user.set(null);
       
-      // Sign out from Supabase (this will clear auth cookies)
       const { error } = await supabase.auth.signOut();
       
       if (error) {
         console.error('Sign out error:', error);
-        // Even if there's an error, we still want to clear local state
-        // So we'll continue with cleanup
       }
       
-      // Clear any additional browser storage if needed
       if (browser) {
-        // Clear all Supabase-related localStorage items
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -285,52 +330,38 @@ export const authStore = {
         
         keysToRemove.forEach(key => {
           localStorage.removeItem(key);
-          console.log('Removed localStorage key:', key);
         });
         
-        // Clear sessionStorage completely
         sessionStorage.clear();
-        
-        // Clear any custom app data
         localStorage.removeItem('user-preferences');
         localStorage.removeItem('dashboard-data');
         
-        // Clear all cookies related to Supabase
         const clearAllCookies = () => {
           const cookies = document.cookie.split(';');
           cookies.forEach(cookie => {
             const eqPos = cookie.indexOf('=');
             const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
             
-            // Remove cookies that might be related to auth or Supabase
             if (name.includes('supabase') || 
                 name.includes('auth') || 
                 name.includes('session') || 
                 name.includes('token') ||
                 name.includes('sb-')) {
               
-              // Remove cookie for current domain
               document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-              
-              // Also try to remove for subdomain
               document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
               
-              // And for root domain
               const domainParts = window.location.hostname.split('.');
               if (domainParts.length > 1) {
                 const rootDomain = domainParts.slice(-2).join('.');
                 document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${rootDomain};`;
               }
-              
-              console.log('Removed cookie:', name);
             }
           });
         };
         
         clearAllCookies();
         
-        // Force clear any remaining auth state by reloading the page
-        // This ensures all auth state is completely cleared
         setTimeout(() => {
           window.location.href = '/';
         }, 100);
@@ -342,17 +373,13 @@ export const authStore = {
     } catch (err) {
       console.error('Sign out error:', err);
       
-      // Even on error, clear local state
       session.set(null);
       user.set(null);
       
-      // Clear browser storage anyway
       if (browser) {
-        // Clear all localStorage items
         localStorage.clear();
         sessionStorage.clear();
         
-        // Force redirect to home page
         setTimeout(() => {
           window.location.href = '/';
         }, 100);
@@ -401,56 +428,163 @@ export const authStore = {
     }
   },
 
-  // Get current user profile
+  // Get current user profile - Updated to match schema
   getCurrentUserProfile: async () => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
-      console.log(user);
       
       if (error || !user) {
         return { success: false, error: 'No authenticated user' };
       }
 
-      const userType = user.user_metadata?.user_type;
+      // Get user profile from user_profiles table
+      const { data: userProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+        
+      if (profileError) {
+        // If no profile exists, create one based on auth metadata
+        const newProfile = {
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || '',
+          username: user.user_metadata?.username || null,
+          phone: user.user_metadata?.phone || null,
+          role: user.user_metadata?.user_type || 'user',
+          is_active: true,
+          is_verified: user.email_confirmed_at ? true : false
+        };
+        
+        const { data: createdProfile, error: createError } = await supabase
+          .from('user_profiles')
+          .insert([newProfile])
+          .select()
+          .single();
+          
+        if (createError) {
+          return { success: false, error: createError.message };
+        }
+        
+        return { success: true, profile: createdProfile, userType: createdProfile.role };
+      }
+
+      const userType = userProfile.role;
       
+      // If user is admin, get admin profile
       if (userType === 'admin') {
-        const { data, error: profileError } = await supabase
+        const { data: adminProfile, error: adminError } = await supabase
           .from('admin_profiles')
           .select('*')
           .eq('id', user.id)
           .single();
           
-        if (profileError) {
-          return { success: false, error: profileError.message };
+        if (adminError) {
+          // Create admin profile if it doesn't exist
+          const newAdminProfile = {
+            id: user.id,
+            department: null,
+            permissions: {
+              "users": true,
+              "devices": true,
+              "sellers": true,
+              "gateways": true,
+              "analytics": true,
+              "dashboard": true,
+              "subscriptions": true
+            },
+            access_level: 'full'
+          };
+          
+          const { data: createdAdminProfile, error: createAdminError } = await supabase
+            .from('admin_profiles')
+            .insert([newAdminProfile])
+            .select()
+            .single();
+            
+          if (createAdminError) {
+            return { success: false, error: createAdminError.message };
+          }
+          
+          return { 
+            success: true, 
+            profile: { ...userProfile, ...createdAdminProfile }, 
+            userType: 'admin' 
+          };
         }
         
-        return { success: true, profile: data, userType: 'admin' };
-      } else {
-        // const { data, error: profileError } = await supabase
-        //   .from('seller_profiles')
-        //   .select('*')
-        //   .eq('id', user.id)
-        //   .single();
-        //   console.log(data)
-        // if (profileError) {
-        //   return { success: false, error: profileError.message };
-        // }
+        return { 
+          success: true, 
+          profile: { ...userProfile, ...adminProfile }, 
+          userType: 'admin' 
+        };
+      } 
+      // If user is seller, get seller profile
+      else if (userType === 'seller') {
+        const { data: sellerProfile, error: sellerError } = await supabase
+          .from('seller_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+          
+        if (sellerError) {
+          // Create seller profile if it doesn't exist
+          const newSellerProfile = {
+            id: user.id,
+            business_name: user.user_metadata?.business_name || '',
+            business_type: null,
+            address: null,
+            city: null,
+            state: null,
+            pincode: null,
+            gstin: null,
+            commission_rate: 10.00,
+            total_sales: 0.00,
+            rating: 0.00,
+            created_by: null,
+            approved_by: null,
+            approved_at: null
+          };
+          
+          const { data: createdSellerProfile, error: createSellerError } = await supabase
+            .from('seller_profiles')
+            .insert([newSellerProfile])
+            .select()
+            .single();
+            
+          if (createSellerError) {
+            return { success: false, error: createSellerError.message };
+          }
+          
+          return { 
+            success: true, 
+            profile: { ...userProfile, ...createdSellerProfile }, 
+            userType: 'seller' 
+          };
+        }
         
-        return { success: true, profile: { ...user.user_metadata, ...user }, userType: 'seller' };
+        return { 
+          success: true, 
+          profile: { ...userProfile, ...sellerProfile }, 
+          userType: 'seller' 
+        };
       }
+      
+      // Regular user
+      return { success: true, profile: userProfile, userType: 'user' };
     } catch (err) {
       return { success: false, error: err.message };
     }
   },
 
-  // Get seller profile by ID (for admin use)
+  // Get seller profile by ID - Updated to match schema
   getSellerProfile: async (sellerId) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     try {
-      // First get the user profile data
       const { data: userProfile, error: userError } = await supabase
         .from('user_profiles')
         .select('*')
@@ -462,7 +596,6 @@ export const authStore = {
         return { success: false, error: userError.message };
       }
       
-      // Then get the seller profile data
       const { data: sellerProfile, error: sellerError } = await supabase
         .from('seller_profiles')
         .select('*')
@@ -473,7 +606,6 @@ export const authStore = {
         return { success: false, error: sellerError.message };
       }
       
-      // Combine the data
       const combinedProfile = {
         ...userProfile,
         ...sellerProfile
@@ -485,7 +617,7 @@ export const authStore = {
     }
   },
 
-  // Get all seller profiles (for admin use)
+  // Get all seller profiles - Updated to match schema
   getAllSellerProfiles: async (options = {}) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
@@ -503,29 +635,13 @@ export const authStore = {
         .from('user_profiles')
         .select(`
           *,
-          seller_profiles (
-            business_name,
-            business_type,
-            address,
-            city,
-            state,
-            pincode,
-            gstin,
-            commission_rate,
-            total_sales,
-            rating,
-            created_by,
-            approved_by,
-            approved_at,
-            created_at,
-            updated_at
-          )
-        `)
+          seller_profiles (*)
+        `, { count: 'exact' })
         .eq('role', 'seller');
       
       // Add search filter
       if (search) {
-        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,seller_profiles.business_name.ilike.%${search}%`);
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
       }
       
       // Add status filter
@@ -550,8 +666,8 @@ export const authStore = {
       // Transform the data to flatten the nested seller_profiles
       const transformedData = data.map(item => ({
         ...item,
-        ...item.seller_profiles,
-        seller_profiles: undefined // Remove the nested object
+        ...(item.seller_profiles || {}),
+        seller_profiles: undefined
       }));
       
       return { 
@@ -569,12 +685,11 @@ export const authStore = {
     }
   },
 
-  // Get seller statistics (for admin dashboard)
+  // Get seller statistics - Updated to match schema
   getSellerStatistics: async () => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     try {
-      // Get total sellers count
       const { count: totalSellers, error: countError } = await supabase
         .from('user_profiles')
         .select('*', { count: 'exact', head: true })
@@ -584,7 +699,6 @@ export const authStore = {
         return { success: false, error: countError.message };
       }
       
-      // Get active sellers count
       const { count: activeSellers, error: activeError } = await supabase
         .from('user_profiles')
         .select('*', { count: 'exact', head: true })
@@ -595,7 +709,6 @@ export const authStore = {
         return { success: false, error: activeError.message };
       }
       
-      // Get total sales from all sellers
       const { data: salesData, error: salesError } = await supabase
         .from('seller_profiles')
         .select('total_sales');
@@ -606,7 +719,6 @@ export const authStore = {
       
       const totalSales = salesData.reduce((sum, seller) => sum + (seller.total_sales || 0), 0);
       
-      // Get average rating
       const { data: ratingData, error: ratingError } = await supabase
         .from('seller_profiles')
         .select('rating');
@@ -635,31 +747,50 @@ export const authStore = {
     }
   },
 
-  // Update seller profile
+  // Update seller profile - Updated to match schema
   updateSellerProfile: async (sellerId, updateData) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     try {
-      // Update user_profiles table
-      console.log(sellerId);
-      console.log(updateData);
+      console.log('Updating seller profile for:', sellerId);
+      
+      // First, check current user and permissions
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        return { success: false, error: 'User not authenticated' };
+      }
+      console.log('Current user ID:', user.id);
+      console.log('Updating seller ID:', sellerId);
+      
+      // Update user_profiles table first
       const userUpdateData = {
         full_name: updateData.full_name,
+        username: updateData.username,
         phone: updateData.phone,
         is_active: updateData.is_active,
         updated_at: new Date().toISOString()
       };
       
-      const { error: userError } = await supabase
-        .from('user_profiles')
-        .update(userUpdateData)
-        .eq('id', sellerId);
-        
-      if (userError) {
-        return { success: false, error: userError.message };
+      // Remove undefined/null values
+      Object.keys(userUpdateData).forEach(key => {
+        if (userUpdateData[key] === undefined || userUpdateData[key] === null) {
+          delete userUpdateData[key];
+        }
+      });
+      
+      if (Object.keys(userUpdateData).length > 1) {
+        const { error: userError } = await supabase
+          .from('user_profiles')
+          .update(userUpdateData)
+          .eq('id', sellerId);
+          
+        if (userError) {
+          console.error('User update error:', userError);
+          return { success: false, error: userError.message };
+        }
       }
       
-      // Update seller_profiles table
+      // Prepare seller update data
       const sellerUpdateData = {
         business_name: updateData.business_name,
         business_type: updateData.business_type,
@@ -668,32 +799,74 @@ export const authStore = {
         state: updateData.state,
         pincode: updateData.pincode,
         gstin: updateData.gstin,
-        commission_rate: updateData.commission_rate,
+        commission_rate: updateData.commission_rate ? parseFloat(updateData.commission_rate) : undefined,
         updated_at: new Date().toISOString()
       };
       
-      const { error: sellerError } = await supabase
-        .from('seller_profiles')
-        .update(sellerUpdateData)
-        .eq('id', sellerId);
+      // Remove undefined/null values
+      Object.keys(sellerUpdateData).forEach(key => {
+        if (sellerUpdateData[key] === undefined || sellerUpdateData[key] === null) {
+          delete sellerUpdateData[key];
+        }
+      });
+      
+      console.log('Seller update data:', sellerUpdateData);
+      
+      if (Object.keys(sellerUpdateData).length > 1) {
+        // Method 1: Use count to verify rows were actually updated
+        const { data, error: sellerError, count } = await supabase
+          .from('seller_profiles')
+          .update(sellerUpdateData)
+          .eq('id', sellerId)
+          .select('*', { count: 'exact' });
+          
+        if (sellerError) {
+          console.error('Seller update error:', sellerError);
+          return { success: false, error: `Seller update failed: ${sellerError.message}` };
+        }
         
-      if (sellerError) {
-        return { success: false, error: sellerError.message };
+        console.log('Update result count:', count);
+        console.log('Update result data:', data);
+        
+        // Check if any rows were actually updated
+        if (count === 0) {
+          return { 
+            success: false, 
+            error: 'No rows were updated. This might be due to RLS policies or the seller not existing.' 
+          };
+        }
+        
+        console.log(`✅ Successfully updated ${count} seller profile(s)`);
       }
       
       return { success: true, message: 'Seller profile updated successfully' };
+      
     } catch (err) {
+      console.error('Catch block error:', err);
       return { success: false, error: err.message };
     }
   },
-
-  // Approve/Reject seller
+  
+  // Approve/Reject seller - Updated to match schema
   approveSeller: async (sellerId, approved, adminId) => {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     try {
+      // Update user_profiles table
+      const { error: userError } = await supabase
+        .from('user_profiles')
+        .update({
+          is_active: approved,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sellerId);
+        
+      if (userError) {
+        return { success: false, error: userError.message };
+      }
+      
+      // Update seller_profiles table
       const updateData = {
-        is_active: approved,
         updated_at: new Date().toISOString()
       };
       
@@ -702,13 +875,13 @@ export const authStore = {
         updateData.approved_at = new Date().toISOString();
       }
       
-      const { error } = await supabase
+      const { error: sellerError } = await supabase
         .from('seller_profiles')
         .update(updateData)
         .eq('id', sellerId);
         
-      if (error) {
-        return { success: false, error: error.message };
+      if (sellerError) {
+        return { success: false, error: sellerError.message };
       }
       
       return { 
@@ -718,5 +891,272 @@ export const authStore = {
     } catch (err) {
       return { success: false, error: err.message };
     }
+  },
+
+  // NEW: Get all users (for admin)
+  getAllUsers: async (options = {}) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search = '',
+        role = 'all',
+        status = 'all',
+        sortBy = 'created_at',
+        sortOrder = 'desc'
+      } = options;
+      
+      let query = supabase
+        .from('user_profiles')
+        .select('*', { count: 'exact' });
+      
+      // Add role filter
+      if (role !== 'all') {
+        query = query.eq('role', role);
+      }
+      
+      // Add search filter
+      if (search) {
+        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,username.ilike.%${search}%`);
+      }
+      
+      // Add status filter
+      if (status !== 'all') {
+        query = query.eq('is_active', status === 'active');
+      }
+      
+      // Add sorting
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      
+      // Add pagination
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      query = query.range(from, to);
+      
+      const { data, error, count } = await query;
+      
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        users: data,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit)
+        }
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+getUserStatistics: async () => {
+  if (!supabase) return { success: false, error: 'Supabase not initialized' };
+  
+  try {
+    // Get total users count
+    const { count: totalUsers, error: countError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true });
+      
+    if (countError) {
+      return { success: false, error: countError.message };
+    }
+    
+    // Get active users count
+    const { count: activeUsers, error: activeError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+      
+    if (activeError) {
+      return { success: false, error: activeError.message };
+    }
+    
+    // Get users by role
+    const { count: regularUsers, error: regularError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'user');
+      
+    if (regularError) {
+      return { success: false, error: regularError.message };
+    }
+    
+    const { count: sellers, error: sellersError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'seller');
+      
+    if (sellersError) {
+      return { success: false, error: sellersError.message };
+    }
+    
+    const { count: admins, error: adminsError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'admin');
+      
+    if (adminsError) {
+      return { success: false, error: adminsError.message };
+    }
+    
+    // Get verified users count
+    const { count: verifiedUsers, error: verifiedError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_verified', true);
+      
+    if (verifiedError) {
+      return { success: false, error: verifiedError.message };
+    }
+    
+    // Get recent users (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const { count: recentUsers, error: recentError } = await supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', thirtyDaysAgo.toISOString());
+      
+    if (recentError) {
+      return { success: false, error: recentError.message };
+    }
+    
+    return {
+      success: true,
+      statistics: {
+        totalUsers: totalUsers || 0,
+        activeUsers: activeUsers || 0,
+        inactiveUsers: (totalUsers || 0) - (activeUsers || 0),
+        verifiedUsers: verifiedUsers || 0,
+        unverifiedUsers: (totalUsers || 0) - (verifiedUsers || 0),
+        recentUsers: recentUsers || 0,
+        usersByRole: {
+          users: regularUsers || 0,
+          sellers: sellers || 0,
+          admins: admins || 0
+        }
+      }
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
-};
+},
+
+// NEW: Update user profile (for admin)
+updateUserProfile: async (userId, updateData) => {
+  if (!supabase) return { success: false, error: 'Supabase not initialized' };
+  
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+      
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true, message: 'User profile updated successfully' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+},
+
+// NEW: Delete user (for admin)
+deleteUser: async (userId) => {
+  if (!supabase) return { success: false, error: 'Supabase not initialized' };
+  
+  try {
+    // First delete from specific role tables if needed
+    const { data: userProfile, error: fetchError } = await supabase
+      .from('user_profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+      
+    if (fetchError) {
+      return { success: false, error: fetchError.message };
+    }
+    
+    // Delete from role-specific tables
+    if (userProfile.role === 'seller') {
+      const { error: sellerError } = await supabase
+        .from('seller_profiles')
+        .delete()
+        .eq('id', userId);
+        
+      if (sellerError) {
+        return { success: false, error: sellerError.message };
+      }
+    } else if (userProfile.role === 'admin') {
+      const { error: adminError } = await supabase
+        .from('admin_profiles')
+        .delete()
+        .eq('id', userId);
+        
+      if (adminError) {
+        return { success: false, error: adminError.message };
+      }
+    }
+    
+    // Delete from user_profiles
+    const { error: deleteError } = await supabase
+      .from('user_profiles')
+      .delete()
+      .eq('id', userId);
+      
+    if (deleteError) {
+      return { success: false, error: deleteError.message };
+    }
+    
+    // Delete from auth.users (this requires admin privileges)
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    
+    if (authError) {
+      console.warn('Could not delete from auth.users:', authError.message);
+      // Continue anyway as profile deletion was successful
+    }
+    
+    return { success: true, message: 'User deleted successfully' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+},
+
+// NEW: Toggle user status (activate/deactivate)
+toggleUserStatus: async (userId, isActive) => {
+  if (!supabase) return { success: false, error: 'Supabase not initialized' };
+  
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        is_active: isActive,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+      
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    
+    return { 
+      success: true, 
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully` 
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+}

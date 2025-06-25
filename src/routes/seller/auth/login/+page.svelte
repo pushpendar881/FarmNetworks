@@ -28,13 +28,9 @@
               addToast('Welcome back!', 'success');
               
               // Redirect based on role
-              if (result.role === 'admin') {
-                  goto('/admin/dashboard');
-              } else if (result.role === 'seller') {
+            
                   goto('/seller/portal/dashboard');
-              } else {
-                  goto('/dashboard'); // fallback
-              }
+               
           } else {
               // Handle specific error cases
               if (result.code === 'EMAIL_NOT_CONFIRMED') {

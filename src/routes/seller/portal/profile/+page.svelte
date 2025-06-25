@@ -20,15 +20,15 @@
         try {
             
             const result = await sellerStore.loadCurrentSeller();
-           
+            
             if (result.success) {
                 sellerProfile = result.profile;
-                console.log(sellerProfile.id);
+                console.log(sellerProfile);
                 // Initialize edit form with current data
                 editForm = {
                     full_name: sellerProfile.full_name || '',
-                    phone: sellerProfile.user_metadata.phone || '',
-                    business_name: sellerProfile.user_metadata.business_name || '',
+                    phone: sellerProfile.phone || '',
+                    business_name: sellerProfile.business_name || '',
                     business_type: sellerProfile.business_type || '',
                     address: sellerProfile.address || '',
                     city: sellerProfile.city || '',
@@ -68,7 +68,8 @@
     
     async function saveProfile() {
         try {
-           
+           console.log(editForm)
+           console.log(sellerProfile.id)
             const result = await sellerStore.updateSeller(sellerProfile.id, editForm);
             
             if (result.success) {

@@ -10,9 +10,9 @@ export async function load({ locals }) {
 
   // Ensure user is a seller
   const userType = locals.user?.user_metadata?.user_type;
-  if (userType !== 'seller') {
-    throw redirect(303, '/admin/dashboard')
-  }
+  // if (userType !== 'seller') {
+  //   throw redirect(303, '/admin/dashboard')
+  // }
 
   return {
     session: locals.session,

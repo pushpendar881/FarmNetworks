@@ -120,7 +120,8 @@ export const sellerStore = {
     error.set(null)
     
     try {
-      const result = await authStore.updateSellerProfile(sellerId, updateData)
+
+      const result = await authStore.updateSellerProfile (sellerId, updateData)
       
       if (result.success) {
         // Refresh the sellers list if we're on admin dashboard

@@ -77,7 +77,7 @@
           goto('/admin/dashboard');
         } else {
           errorMessage = 'Access denied. Admin privileges required.';
-          await authStore.signOut();
+           await authStore.signOut();
         }
       } else {
         // Handle specific error cases
