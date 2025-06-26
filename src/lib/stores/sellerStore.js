@@ -26,7 +26,7 @@ export const sellerStore = {
     
     try {
       const result = await authStore.getCurrentUserProfile()
-      console.log(result);
+      // console.log(result);
       if (result.success && result.userType === 'seller') {
         currentSeller.set(result.profile)
         return { success: true, profile: result.profile }

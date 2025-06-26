@@ -1,5 +1,5 @@
 // $lib/stores/dashboard.js
-import { writable, derived, readable } from 'svelte/store';
+import { writable, derived, readable, get } from 'svelte/store';
 import { 
   getSellerEarnings, 
   getMonthlyBreakdown, 
@@ -43,6 +43,9 @@ export const dashboardSummary = writable({
   lastMonthEarnings: 0
 });
 
+// Real-time subscription reference
+let realtimeSubscription = null;
+
 // Derived store for formatted earnings
 export const formattedEarnings = derived(earnings, ($earnings) => ({
   ...$earnings,
@@ -72,16 +75,31 @@ export const earningsActions = {
       return;
     }
 
+    // Clean up existing subscription
+    if (realtimeSubscription) {
+      realtimeSubscription.unsubscribe();
+      realtimeSubscription = null;
+    }
+
     currentSellerId.set(sellerId);
     isLoading.set(true);
     error.set(null);
 
     try {
-      // Load all data in parallel
-      const [earningsData, monthlyData, summaryData] = await Promise.all([
+      // Load all data in parallel with timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 30000)
+      );
+
+      const dataPromises = Promise.all([
         getSellerEarnings(sellerId),
         getMonthlyBreakdown(sellerId),
         getSellerDashboardSummary(sellerId)
+      ]);
+
+      const [earningsData, monthlyData, summaryData] = await Promise.race([
+        dataPromises,
+        timeoutPromise
       ]);
 
       earnings.set(earningsData);
@@ -89,13 +107,17 @@ export const earningsActions = {
       dashboardSummary.set(summaryData);
 
       // Set up real-time updates
-      subscribeToEarningsUpdates(sellerId, () => {
+      realtimeSubscription = subscribeToEarningsUpdates(sellerId, () => {
+        console.log('Real-time update triggered');
         earningsActions.refresh();
       });
 
     } catch (err) {
       console.error('Error initializing earnings:', err);
-      error.set('Failed to load earnings data');
+      const errorMessage = err.message.includes('timeout') 
+        ? 'Request timed out. Please try again.' 
+        : 'Failed to load earnings data. Please check your connection.';
+      error.set(errorMessage);
     } finally {
       isLoading.set(false);
     }
@@ -104,10 +126,15 @@ export const earningsActions = {
   // Refresh earnings data
   async refresh() {
     const sellerId = get(currentSellerId);
-    if (!sellerId) return;
+    const month = get(selectedMonth);
+    
+    if (!sellerId) {
+      error.set('No seller selected');
+      return;
+    }
 
     try {
-      const earningsData = await getSellerEarnings(sellerId, get(selectedMonth));
+      const earningsData = await getSellerEarnings(sellerId, month);
       earnings.set(earningsData);
     } catch (err) {
       console.error('Error refreshing earnings:', err);
@@ -117,11 +144,22 @@ export const earningsActions = {
 
   // Update selected month and refresh data
   async updateMonth(month) {
+    if (!month) {
+      error.set('Invalid month selected');
+      return;
+    }
+
     selectedMonth.set(month);
     const sellerId = get(currentSellerId);
-    if (!sellerId) return;
+    
+    if (!sellerId) {
+      error.set('No seller selected');
+      return;
+    }
 
     isLoading.set(true);
+    error.set(null);
+
     try {
       const earningsData = await getSellerEarnings(sellerId, month);
       earnings.set(earningsData);
@@ -144,21 +182,30 @@ export const earningsActions = {
     }
 
     isExporting.set(true);
+    error.set(null);
+
     try {
       const csvContent = await exportEarningsCSV(sellerId, month);
       
+      // Validate CSV content
+      if (!csvContent || csvContent.startsWith('Error')) {
+        throw new Error('Failed to generate CSV data');
+      }
+      
       // Create and download file
-      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `earnings_report_${month || 'current'}.csv`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
     } catch (err) {
       console.error('Error exporting data:', err);
-      error.set('Failed to export data');
+      error.set('Failed to export data. Please try again.');
     } finally {
       isExporting.set(false);
     }
@@ -167,15 +214,18 @@ export const earningsActions = {
   // Clear error
   clearError() {
     error.set(null);
+  },
+
+  // Cleanup function
+  cleanup() {
+    if (realtimeSubscription) {
+      realtimeSubscription.unsubscribe();
+      realtimeSubscription = null;
+    }
+    currentSellerId.set(null);
+    error.set(null);
   }
 };
-
-// Helper function to get store value (for use in functions)
-function get(store) {
-  let value;
-  store.subscribe(v => value = v)();
-  return value;
-}
 
 // Export individual stores and actions
 export default {

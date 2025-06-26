@@ -32,7 +32,7 @@ export const initializeAuth = async () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        console.log('Auth state changed:', event)
+        // console.log('Auth state changed:', event)
         
         if (currentSession) {
           session.set(currentSession)

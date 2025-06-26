@@ -11,10 +11,21 @@
         error,
         earningsActions 
     } from '$lib/stores/seller/dashboard.js';
-    
-    // Get seller ID from your auth system or props
-    export let sellerId = null; // Pass this as a prop or get from auth
-    
+import { sellerStore } from '$lib/stores/sellerStore.js';
+
+let sellerId = null;
+
+onMount(async () => {
+    const seller = await sellerStore.loadCurrentSeller();
+    sellerId = seller?.profile?.id;
+    if (sellerId) {
+        await earningsActions.init(sellerId);
+    } else {
+        console.warn('Seller ID not found. Please check authentication.');
+    }
+    monthOptions = generateMonthOptions();
+});
+
     let selectedMonthValue = new Date().toISOString().slice(0, 7);
     let monthOptions = [];
     
@@ -46,18 +57,6 @@
     async function handleExport() {
         await earningsActions.exportData();
     }
-    
-    onMount(async () => {
-        monthOptions = generateMonthOptions();
-        
-        // Initialize with seller ID - you should get this from your auth system
-        if (sellerId) {
-            await earningsActions.init(sellerId);
-        } else {
-            // For demo purposes, you might want to get sellerId from somewhere else
-            console.warn('Seller ID not provided. Please pass sellerId as prop or get from auth.');
-        }
-    });
     
     // Reactive statement to handle selectedMonth changes
     $: if ($selectedMonth !== selectedMonthValue) {
