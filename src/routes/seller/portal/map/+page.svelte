@@ -359,13 +359,13 @@
   
     <!-- Map Controls -->
     <div class="map-section">
-      <div class="section-header">
+       <div class="section-header"> 
         <h3 class="section-title">Device Locations</h3>
-        <div class="map-controls">
+        <!--<div class="map-controls">
           <button class="control-btn" on:click={refreshData} disabled={loading}>
             {loading ? '🔄' : '🔄'} Refresh
           </button>
-        </div>
+        </div> -->
       </div>
   
       <!-- Filter Controls -->

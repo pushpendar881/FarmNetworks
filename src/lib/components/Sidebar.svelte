@@ -8,7 +8,7 @@
         { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/seller/portal/dashboard' },
         { id: 'earnings', icon: '💰', label: 'Earnings', href: '/seller/portal/earnings' },
         { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/seller/portal/map' },
-        { id: 'settings', icon: '⚙️', label: 'Settings', href: '/seller/portal/settings' },
+        // { id: 'settings', icon: '⚙️', label: 'Settings', href: '/seller/portal/settings' },
         { id: 'support', icon: '📞', label: 'Support', href: '/seller/portal/support' },
         { id: 'logout', icon: '🚪', label: 'Logout', action: 'logout' }
     ];

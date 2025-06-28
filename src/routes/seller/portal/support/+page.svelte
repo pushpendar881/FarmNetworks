@@ -11,26 +11,49 @@
     <p class="text-black">Get help and support for your DeviceNet seller account.</p>
     
     <div class="support-sections">
-      <section class="support-section">
+      <!-- <section class="support-section">
         <h2 class="text-black">📚 Knowledge Base</h2>
         <p class="text-black">Find answers to common questions and learn how to use the platform effectively.</p>
-      </section>
+      </section> -->
       
       <section class="support-section">
         <h2 class="text-black">💬 Contact Support</h2>
         <p class="text-black">Need personalized help? Our support team is here to assist you.</p>
-        <button class="contact-btn">Contact Us</button>
+        
+        <div class="contact-options">
+          <div class="contact-item">
+            <span class="contact-icon">📧</span>
+            <a href="mailto:farmnetworks@gmail.com" class="contact-link">
+              farmnetworks@gmail.com
+            </a>
+          </div>
+          
+          <div class="contact-item">
+            <span class="contact-icon">📞</span>
+            <a href="tel:1234567890" class="contact-link">
+              1234567890
+            </a>
+          </div>
+          
+          <div class="contact-item">
+            <span class="contact-icon">🌐</span>
+            <a href="https://farmnetworks.in/" target="_blank" class="contact-link">
+              Visit website
+            </a>
+          </div>
+        </div>
       </section>
       
       <section class="support-section">
         <h2>🐛 Report Issues</h2>
         <p>Found a bug or technical issue? Let us know so we can fix it.</p>
-        <button class="report-btn">Report Issue</button>
+        <button class="report-btn"><a href='https://farmnetworks.in/'>Report Issue</a></button>
       </section>
       
       <section class="support-section">
         <h2>📖 Documentation</h2>
         <p>Access detailed documentation and API guides for developers.</p>
+        
       </section>
     </div>
   </div>
