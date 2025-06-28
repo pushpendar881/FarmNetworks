@@ -267,7 +267,7 @@
             </div>
 
             <!-- Performance Metrics -->
-            <div class="performance-section">
+            <!-- <div class="performance-section">
                 <h3>Performance Metrics</h3>
                 <div class="metrics-grid">
                     <div class="metric-card">
@@ -308,7 +308,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </div> -->
         </div>
     {:else}
         <div class="no-profile">

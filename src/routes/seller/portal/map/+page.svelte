@@ -1,454 +1,996 @@
 <script>
+    import { onMount, tick } from 'svelte';
+    import { supabase } from '$lib/supabase.js';
     import Header from '$lib/components/Header.svelte';
-    import { masters } from '$lib/stores/dashboard.js';
     
-    let selectedMaster = null;
-    
-    function selectMaster(master) {
-        selectedMaster = master;
+    // Map and data state
+    let map;
+    let mapContainer;
+    let gateways = [];
+    let devices = [];
+    let selectedGateway = null;
+    let loading = true;
+    let error = null;
+  
+    // Filter states
+    let showGateways = true;
+    let showDevices = true;
+    let statusFilter = 'all'; // all, active, inactive
+    let deviceStatusFilter = 'all'; // all, online, offline
+    let mapType = 'street'; // street, satellite
+  
+    // Statistics
+    let stats = {
+      totalGateways: 0,
+      activeGateways: 0,
+      totalDevices: 0,
+      onlineDevices: 0
+    };
+  
+    // Filtered data based on current filters
+    $: filteredGateways = gateways.filter(gateway => {
+      if (statusFilter === 'all') return true;
+      return gateway.status === statusFilter;
+    });
+  
+    $: filteredDevices = devices.filter(device => {
+      if (deviceStatusFilter === 'all') return true;
+      // Assuming motor_status > 0 means online, 0 means offline
+      const isOnline = device.motor_status > 0;
+      return deviceStatusFilter === 'online' ? isOnline : !isOnline;
+    });
+  
+    // Fetch data from Supabase
+    async function fetchGateways() {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('gateways')
+          .select(`
+            *,
+            owned_by_profile:seller_profiles!gateways_owned_by_fkey(business_name),
+            managed_by_profile:admin_profiles!gateways_managed_by_fkey(*)
+          `);
+  
+        if (fetchError) throw fetchError;
+        
+        gateways = data || [];
+        stats.totalGateways = gateways.length;
+        stats.activeGateways = gateways.filter(g => g.status === 'active').length;
+        
+      } catch (err) {
+        console.error('Error fetching gateways:', err);
+        error = 'Failed to load gateways';
+      }
     }
-</script>
-
-<svelte:head>
-    <title>Devices Map - Device Management System</title>
-</svelte:head>
-
-<Header title="Devices Map" />
-
-<div class="dashboard-content">
+  
+    async function fetchDevices() {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('devices')
+          .select(`
+            *,
+            user_profile:user_profiles(full_name, email),
+            gateway:gateways(name, status),
+            seller_profile:seller_profiles(business_name)
+          `);
+  
+        if (fetchError) throw fetchError;
+        
+        devices = data || [];
+        stats.totalDevices = devices.length;
+        stats.onlineDevices = devices.filter(d => d.motor_status > 0).length;
+        
+      } catch (err) {
+        console.error('Error fetching devices:', err);
+        error = 'Failed to load devices';
+      }
+    }
+  
+    // Initialize Leaflet map
+    function initializeMap() {
+      console.log('Attempting to initialize map...');
+      console.log('window.L available:', typeof window !== 'undefined' && !!window.L);
+      console.log('mapContainer available:', !!mapContainer);
+      
+      if (typeof window !== 'undefined' && window.L && mapContainer) {
+        try {
+          console.log('Initializing Leaflet map...');
+          // Default center (Mumbai area based on your coordinates)
+          const defaultCenter = [19.2686, 73.9472];
+          
+          map = L.map(mapContainer, {
+            center: defaultCenter,
+            zoom: 12,
+            zoomControl: true
+          });
+    
+          console.log('Map initialized successfully');
+          updateMapTiles();
+          addMarkersToMap();
+        } catch (err) {
+          console.error('Error initializing map:', err);
+          error = 'Failed to initialize map';
+        }
+      } else {
+        console.warn('Map initialization skipped: window.L or mapContainer not available');
+        // Retry after a short delay
+        setTimeout(() => {
+          if (!map && mapContainer) {
+            initializeMap();
+          }
+        }, 100);
+      }
+    }
+  
+    function updateMapTiles() {
+      if (!map) return;
+  
+      // Remove existing tile layer
+      map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) {
+          map.removeLayer(layer);
+        }
+      });
+  
+      // Add new tile layer based on map type
+      const tileUrl = mapType === 'satellite' 
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      
+      const attribution = mapType === 'satellite'
+        ? '&copy; <a href="https://www.esri.com/">Esri</a>'
+        : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+  
+      L.tileLayer(tileUrl, { attribution }).addTo(map);
+    }
+  
+    function addMarkersToMap() {
+      if (!map) return;
+  
+      // Clear existing markers (except tile layers)
+      map.eachLayer(layer => {
+        if (!(layer instanceof L.TileLayer)) {
+          map.removeLayer(layer);
+        }
+      });
+  
+      // Add gateway markers with coverage circles
+      if (showGateways) {
+        filteredGateways.forEach(gateway => {
+          if (gateway.latitude && gateway.longitude) {
+            const lat = parseFloat(gateway.latitude);
+            const lng = parseFloat(gateway.longitude);
+            
+            // Gateway marker
+            const gatewayIcon = L.divIcon({
+              className: 'gateway-marker',
+              html: `<div class="gateway-dot ${gateway.status}"></div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10]
+            });
+  
+            const marker = L.marker([lat, lng], { icon: gatewayIcon })
+              .bindPopup(`
+                <div class="popup-content">
+                  <h4>${gateway.name}</h4>
+                  <p><strong>Status:</strong> ${gateway.status}</p>
+                  <p><strong>Devices:</strong> ${gateway.current_device_count}/${gateway.max_devices}</p>
+                  <p><strong>Address:</strong> ${gateway.address || 'Not specified'}</p>
+                  ${gateway.owned_by_profile ? `<p><strong>Owner:</strong> ${gateway.owned_by_profile.business_name}</p>` : ''}
+                </div>
+              `)
+              .addTo(map);
+  
+            // Coverage circle
+            if (gateway.coverage_radius) {
+              L.circle([lat, lng], {
+                radius: gateway.coverage_radius,
+                color: gateway.status === 'active' ? '#6366f1' : '#ef4444',
+                fillColor: gateway.status === 'active' ? '#6366f1' : '#ef4444',
+                fillOpacity: 0.1,
+                weight: 2,
+                opacity: 0.6
+              }).addTo(map);
+            }
+  
+            // Click handler to select gateway
+            marker.on('click', () => {
+              selectedGateway = gateway;
+              fetchGatewayDevices(gateway.id);
+            });
+          }
+        });
+      }
+  
+      // Add device markers
+      if (showDevices) {
+        filteredDevices.forEach(device => {
+          if (device.latitude && device.longitude) {
+            const lat = parseFloat(device.latitude);
+            const lng = parseFloat(device.longitude);
+            const isOnline = device.motor_status > 0;
+            
+            const deviceIcon = L.divIcon({
+              className: 'device-marker',
+              html: `<div class="device-dot ${isOnline ? 'online' : 'offline'}"></div>`,
+              iconSize: [12, 12],
+              iconAnchor: [6, 6]
+            });
+  
+            L.marker([lat, lng], { icon: deviceIcon })
+              .bindPopup(`
+                <div class="popup-content">
+                  <h4>${device.device_name || device.device_id}</h4>
+                  <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
+                  <p><strong>User:</strong> ${device.user_profile?.full_name || 'Unknown'}</p>
+                  <p><strong>Gateway:</strong> ${device.gateway?.name || 'Unknown'}</p>
+                  <p><strong>Last Updated:</strong> ${new Date(device.last_updated).toLocaleString()}</p>
+                  ${device.address ? `<p><strong>Address:</strong> ${device.address}</p>` : ''}
+                </div>
+              `)
+              .addTo(map);
+          }
+        });
+      }
+    }
+  
+    async function fetchGatewayDevices(gatewayId) {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('devices')
+          .select(`
+            *,
+            user_profile:user_profiles(full_name, email),
+            seller_profile:seller_profiles(business_name)
+          `)
+          .eq('gateway_id', gatewayId);
+  
+        if (fetchError) throw fetchError;
+        
+        if (selectedGateway) {
+          selectedGateway.devices = data || [];
+        }
+      } catch (err) {
+        console.error('Error fetching gateway devices:', err);
+      }
+    }
+  
+    function refreshData() {
+      loading = true;
+      error = null;
+      Promise.all([fetchGateways(), fetchDevices()])
+        .finally(() => {
+          loading = false;
+          // Update map after data is loaded
+          if (map) {
+            addMarkersToMap();
+          } else if (mapContainer && typeof window !== 'undefined' && window.L) {
+            // If map isn't initialized yet, try to initialize it
+            initializeMap();
+          }
+        });
+    }
+  
+    // Reactive updates for map
+    $: if (map && (showGateways || showDevices || statusFilter || deviceStatusFilter)) {
+      addMarkersToMap();
+    }
+  
+    $: if (map && mapType) {
+      updateMapTiles();
+    }
+  
+    // Initialize map when container becomes available
+    $: if (mapContainer && typeof window !== 'undefined' && window.L && !map) {
+      initializeMap();
+    }
+  
+    onMount(async () => {
+      console.log('Map component mounted');
+      // Load Leaflet CSS and JS
+      if (typeof window !== 'undefined') {
+        console.log('Loading Leaflet resources...');
+        // Add Leaflet CSS
+        const cssLink = document.createElement('link');
+        cssLink.rel = 'stylesheet';
+        cssLink.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(cssLink);
+  
+        // Load Leaflet JS
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = async () => {
+          console.log('Leaflet script loaded');
+          // Wait for the next tick to ensure mapContainer is bound
+          await tick();
+          console.log('Map container ready:', !!mapContainer);
+          // Fetch data first, then initialize map
+          await refreshData();
+          initializeMap();
+        };
+        script.onerror = (err) => {
+          console.error('Failed to load Leaflet script:', err);
+          error = 'Failed to load map library';
+        };
+        document.head.appendChild(script);
+      } else {
+        // If not in browser, just fetch data
+        await refreshData();
+      }
+    });
+  </script>
+  
+  <svelte:head>
+    <title>Device Map - Real-time Location Tracking</title>
+  </svelte:head>
+  
+  <Header title="Device Map" />
+  
+  <div class="dashboard-content">
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon">🏢</div>
+        <div class="stat-info">
+          <div class="stat-number">{stats.totalGateways}</div>
+          <div class="stat-label">Total Gateways</div>
+          <div class="stat-detail">{stats.activeGateways} Active</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">📱</div>
+        <div class="stat-info">
+          <div class="stat-number">{stats.totalDevices}</div>
+          <div class="stat-label">Total Devices</div>
+          <div class="stat-detail">{stats.onlineDevices} Online</div>
+        </div>
+      </div>
+  
+      <div class="stat-card">
+        <div class="stat-icon">📊</div>
+        <div class="stat-info">
+          <div class="stat-number">{stats.totalDevices > 0 ? Math.round((stats.onlineDevices / stats.totalDevices) * 100) : 0}%</div>
+          <div class="stat-label">Online Rate</div>
+          <div class="stat-detail">Device Connectivity</div>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Map Controls -->
     <div class="map-section">
-        <div class="section-header">
-            <h3 class="section-title">Device Locations</h3>
-            <div class="map-controls">
-                <button class="map-btn">📍 Show All</button>
-                <button class="map-btn">🔄 Refresh</button>
-            </div>
+      <div class="section-header">
+        <h3 class="section-title">Device Locations</h3>
+        <div class="map-controls">
+          <button class="control-btn" on:click={refreshData} disabled={loading}>
+            {loading ? '🔄' : '🔄'} Refresh
+          </button>
         </div>
-
-        <div class="map-container">
-            <div class="map-placeholder">
-                <div class="map-icon">🗺️</div>
-                <div class="map-title">Interactive Map</div>
-                <div class="map-subtitle">Device locations and coverage areas</div>
-                
-                <!-- Simulated map markers -->
-                <div class="map-markers">
-                    {#each $masters as master, index}
-                    <div 
-                    class="map-marker" 
-                    class:active={selectedMaster?.id === master.id}
-                    style="top: {30 + index * 20}%; left: {20 + index * 30}%;"
-                    tabindex="0"
-                    role="button"
-                    on:click={() => selectMaster(master)}
-                    on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectMaster(master)}
-                >
-                            <div class="marker-dot"></div>
-                            <div class="marker-label">{master.id}</div>
-                        </div>
-                    {/each}
-                </div>
-            </div>
+      </div>
+  
+      <!-- Filter Controls -->
+      <div class="filter-controls">
+        <div class="filter-group">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={showGateways} />
+            <span class="checkmark"></span>
+            Show Gateways
+          </label>
+          
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={showDevices} />
+            <span class="checkmark"></span>
+            Show Devices
+          </label>
         </div>
+  
+        <div class="filter-group">
+          <select bind:value={statusFilter} class="filter-select">
+            <option value="all">All Gateways</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive Only</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+  
+          <select bind:value={deviceStatusFilter} class="filter-select">
+            <option value="all">All Devices</option>
+            <option value="online">Online Only</option>
+            <option value="offline">Offline Only</option>
+          </select>
+  
+          <select bind:value={mapType} class="filter-select">
+            <option value="street">Street View</option>
+            <option value="satellite">Satellite View</option>
+          </select>
+        </div>
+      </div>
+  
+      <!-- Legend -->
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot gateway active"></div>
+          <span>Active Gateway</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot gateway inactive"></div>
+          <span>Inactive Gateway</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot device online"></div>
+          <span>Online Device</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot device offline"></div>
+          <span>Offline Device</span>
+        </div>
+      </div>
+  
+      <!-- Map Container -->
+      <div class="map-container">
+        {#if loading}
+          <div class="map-loading">
+            <div class="loading-spinner"></div>
+            <p>Loading map data...</p>
+          </div>
+        {:else if error}
+          <div class="map-error">
+            <p>❌ {error}</p>
+            <button class="retry-btn" on:click={refreshData}>Retry</button>
+          </div>
+        {:else}
+          <div bind:this={mapContainer} class="leaflet-map"></div>
+        {/if}
+      </div>
     </div>
-
-    <!-- Device List -->
-    <div class="devices-section">
+  
+    <!-- Selected Gateway Details -->
+    {#if selectedGateway}
+      <div class="gateway-details-section">
         <div class="section-header">
-            <h3 class="section-title">Master Devices</h3>
+          <h3 class="section-title">Gateway Details: {selectedGateway.name}</h3>
+          <button class="close-btn" on:click={() => selectedGateway = null}>✕</button>
         </div>
-
-        <div class="devices-grid">
-            {#each $masters as master}
-            <div 
-            class="device-location-card" 
-            class:selected={selectedMaster?.id === master.id}
-            tabindex="0"
-            role="button"
-            on:click={() => selectMaster(master)}
-            on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectMaster(master)}
-        >
-                    <div class="location-header">
-                        <div class="location-info">
-                            <div class="location-name">{master.location}</div>
-                            <div class="location-id">{master.id}</div>
-                        </div>
-                        <div class="location-status" class:online={master.status === 'online'}>
-                            {master.status === 'online' ? '🟢' : '🔴'}
-                        </div>
-                    </div>
-                    
-                    <div class="location-details">
-                        <div class="detail-item">
-                            <span class="detail-label">Coverage:</span>
-                            <span class="detail-value">{master.range}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Nodes:</span>
-                            <span class="detail-value">{master.nodes.length}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-label">Installed:</span>
-                            <span class="detail-value">{master.installed}</span>
-                        </div>
-                    </div>
-
-                    <div class="nodes-summary">
-                        <div class="nodes-count">
-                            <span class="online-count">
-                                {master.nodes.filter(n => n.status === 'online').length} Online
-                            </span>
-                            <span class="offline-count">
-                                {master.nodes.filter(n => n.status === 'offline').length} Offline
-                            </span>
-                        </div>
-                    </div>
+  
+        <div class="gateway-info-grid">
+          <div class="info-card">
+            <h4>Basic Information</h4>
+            <div class="info-details">
+              <div class="info-row">
+                <span>Status:</span>
+                <span class="status-badge {selectedGateway.status}">{selectedGateway.status}</span>
+              </div>
+              <div class="info-row">
+                <span>Address:</span>
+                <span>{selectedGateway.address || 'Not specified'}</span>
+              </div>
+              <div class="info-row">
+                <span>Coverage:</span>
+                <span>{selectedGateway.coverage_radius}m radius</span>
+              </div>
+              <div class="info-row">
+                <span>Capacity:</span>
+                <span>{selectedGateway.current_device_count}/{selectedGateway.max_devices} devices</span>
+              </div>
+            </div>
+          </div>
+  
+          {#if selectedGateway.owned_by_profile}
+            <div class="info-card">
+              <h4>Owner Information</h4>
+              <div class="info-details">
+                <div class="info-row">
+                  <span>Business:</span>
+                  <span>{selectedGateway.owned_by_profile.business_name}</span>
                 </div>
-            {/each}
-        </div>
-    </div>
-
-    <!-- Selected Master Details -->
-    {#if selectedMaster}
-        <div class="master-details-section">
-            <div class="section-header">
-                <h3 class="section-title">Selected Master: {selectedMaster.location}</h3>
-                <button class="close-btn" on:click={() => selectedMaster = null}>✕</button>
+              </div>
             </div>
-
-            <div class="nodes-grid">
-                {#each selectedMaster.nodes as node}
-                    <div class="node-detail-card">
-                        <div class="node-header">
-                            <span class="node-id">{node.id}</span>
-                            <span class="node-status" class:online={node.status === 'online'}>
-                                {node.status}
-                            </span>
-                        </div>
-                        <div class="node-info">
-                            <div class="info-row">
-                                <span>Last Active:</span>
-                                <span>{node.lastActive}</span>
-                            </div>
-                            <div class="info-row">
-                                <span>Recharge:</span>
-                                <span>{node.rechargeDate}</span>
-                            </div>
-                            <div class="info-row">
-                                <span>Expiry:</span>
-                                <span>{node.expiryDate}</span>
-                            </div>
-                        </div>
+          {/if}
+        </div>
+  
+        <!-- Connected Devices -->
+        {#if selectedGateway.devices}
+          <div class="devices-section">
+            <h4>Connected Devices ({selectedGateway.devices.length})</h4>
+            <div class="devices-grid">
+              {#each selectedGateway.devices as device}
+                <div class="device-card">
+                  <div class="device-header">
+                    <span class="device-name">{device.device_name || device.device_id}</span>
+                    <span class="device-status {device.motor_status > 0 ? 'online' : 'offline'}">
+                      {device.motor_status > 0 ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <div class="device-details">
+                    <div class="detail-row">
+                      <span>User:</span>
+                      <span>{device.user_profile?.full_name || 'Unknown'}</span>
                     </div>
-                {/each}
+                    <div class="detail-row">
+                      <span>Last Updated:</span>
+                      <span>{new Date(device.last_updated).toLocaleString()}</span>
+                    </div>
+                    {#if device.address}
+                      <div class="detail-row">
+                        <span>Address:</span>
+                        <span>{device.address}</span>
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
             </div>
-        </div>
+          </div>
+        {/if}
+      </div>
     {/if}
-</div>
-
-<style>
-    .dashboard-content {
-        padding: 30px 40px;
+  </div>
+  
+  <style>
+    :global(.gateway-marker) {
+      background: transparent;
+      border: none;
     }
-
-    .map-section, .devices-section, .master-details-section {
-        background: white;
-        padding: 25px;
-        border-radius: 15px;
-        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
-        margin-bottom: 30px;
+  
+    :global(.gateway-dot) {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
-
-    .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
+  
+    :global(.gateway-dot.active) {
+      background: #6366f1;
     }
-
-    .section-title {
-        font-size: 18px;
-        font-weight: 600;
-        color: #2d3748;
+  
+    :global(.gateway-dot.inactive) {
+      background: #ef4444;
     }
-
-    .map-controls {
-        display: flex;
-        gap: 10px;
+  
+    :global(.gateway-dot.maintenance) {
+      background: #f59e0b;
     }
-
-    .map-btn {
-        background: #667eea;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: background 0.3s ease;
+  
+    :global(.device-marker) {
+      background: transparent;
+      border: none;
     }
-
-    .map-btn:hover {
-        background: #5a67d8;
+  
+    :global(.device-dot) {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
     }
-
-    .close-btn {
-        background: #e53e3e;
-        color: white;
-        border: none;
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
+  
+    :global(.device-dot.online) {
+      background: #10b981;
+      animation: pulse 2s infinite;
     }
-
-    .map-container {
-        height: 400px;
-        border: 2px solid #e2e8f0;
-        border-radius: 12px;
-        overflow: hidden;
+  
+    :global(.device-dot.offline) {
+      background: #ef4444;
     }
-
-    .map-placeholder {
-        height: 100%;
-        background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        position: relative;
+  
+    :global(.popup-content) {
+      font-size: 14px;
+      line-height: 1.4;
     }
-
-    .map-icon {
-        font-size: 48px;
-        margin-bottom: 10px;
+  
+    :global(.popup-content h4) {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      font-weight: 600;
     }
-
-    .map-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #2d3748;
-        margin-bottom: 5px;
+  
+    :global(.popup-content p) {
+      margin: 4px 0;
     }
-
-    .map-subtitle {
-        color: #718096;
-        font-size: 14px;
-    }
-
-    .map-markers {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        top: 0;
-        left: 0;
-    }
-
-    .map-marker {
-        position: absolute;
-        cursor: pointer;
-        transform: translate(-50%, -50%);
-        transition: all 0.3s ease;
-    }
-
-    .map-marker:hover {
-        transform: translate(-50%, -50%) scale(1.1);
-    }
-
-    .marker-dot {
-        width: 12px;
-        height: 12px;
-        background: #667eea;
-        border-radius: 50%;
-        border: 3px solid white;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        margin: 0 auto 5px;
-    }
-
-    .map-marker.active .marker-dot {
-        background: #e53e3e;
-        animation: pulse 2s infinite;
-    }
-
+  
     @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
     }
-
-    .marker-label {
-        background: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 10px;
-        font-weight: 600;
-        color: #2d3748;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-        white-space: nowrap;
+  
+    .dashboard-content {
+      padding: 30px 40px;
+      max-width: 1400px;
+      margin: 0 auto;
     }
-
-    .devices-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
+  
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
     }
-
-    .device-location-card {
-        border: 2px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px;
-        cursor: pointer;
-        transition: all 0.3s ease;
+  
+    .stat-card {
+      background: white;
+      padding: 25px;
+      border-radius: 15px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 20px;
     }
-
-    .device-location-card:hover {
-        border-color: #667eea;
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  
+    .stat-icon {
+      font-size: 40px;
+      width: 70px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 15px;
     }
-
-    .device-location-card.selected {
-        border-color: #667eea;
-        background: #f0f9ff;
+  
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: #2d3748;
+      line-height: 1;
     }
-
-    .location-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
+  
+    .stat-label {
+      font-size: 14px;
+      color: #718096;
+      margin-top: 4px;
     }
-
-    .location-name {
-        font-weight: 600;
-        color: #2d3748;
-        font-size: 16px;
+  
+    .stat-detail {
+      font-size: 12px;
+      color: #38a169;
+      font-weight: 600;
+      margin-top: 2px;
     }
-
-    .location-id {
-        color: #718096;
-        font-size: 12px;
-        margin-top: 2px;
+  
+    .map-section {
+      background: white;
+      padding: 25px;
+      border-radius: 15px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+      margin-bottom: 30px;
     }
-
-    .location-status {
-        font-size: 20px;
+  
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
     }
-
-    .location-details {
-        margin-bottom: 15px;
+  
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2d3748;
     }
-
-    .detail-item {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 8px;
-        font-size: 14px;
+  
+    .map-controls {
+      display: flex;
+      gap: 10px;
     }
-
-    .detail-label {
-        color: #718096;
+  
+    .control-btn {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s ease;
     }
-
-    .detail-value {
-        font-weight: 600;
-        color: #2d3748;
+  
+    .control-btn:hover:not(:disabled) {
+      background: #5a67d8;
+      transform: translateY(-1px);
     }
-
-    .nodes-summary {
-        padding-top: 15px;
-        border-top: 1px solid #e2e8f0;
+  
+    .control-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
-
-    .nodes-count {
-        display: flex;
-        justify-content: space-between;
-        font-size: 12px;
+  
+    .filter-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 20px;
+      flex-wrap: wrap;
     }
-
-    .online-count {
-        color: #38a169;
-        font-weight: 600;
+  
+    .filter-group {
+      display: flex;
+      gap: 15px;
+      align-items: center;
     }
-
-    .offline-count {
-        color: #e53e3e;
-        font-weight: 600;
+  
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #4a5568;
+      cursor: pointer;
     }
-
-    .nodes-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 15px;
+  
+    .checkbox-label input[type="checkbox"] {
+      accent-color: #667eea;
     }
-
-    .node-detail-card {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 15px;
-        background: #f9f9f9;
+  
+    .filter-select {
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+      color: #374151;
     }
-
-    .node-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 10px;
+  
+    .legend {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
     }
-
-    .node-id {
-        font-weight: 600;
-        color: #2d3748;
+  
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #4a5568;
     }
-
-    .node-status {
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 12px;
-        font-weight: 600;
-        background: #fed7d7;
-        color: #742a2a;
+  
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     }
-
-    .node-status.online {
-        background: #c6f6d5;
-        color: #22543d;
+  
+    .legend-dot.gateway.active {
+      background: #6366f1;
     }
-
-    .node-info {
-        font-size: 12px;
+  
+    .legend-dot.gateway.inactive {
+      background: #ef4444;
     }
-
+  
+    .legend-dot.device.online {
+      background: #10b981;
+    }
+  
+    .legend-dot.device.offline {
+      background: #ef4444;
+    }
+  
+    .map-container {
+      height: 600px;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid #e5e7eb;
+    }
+  
+    .leaflet-map {
+      height: 100%;
+      width: 100%;
+    }
+  
+    .map-loading, .map-error {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f8fafc;
+      color: #64748b;
+    }
+  
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #e2e8f0;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+  
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  
+    .retry-btn {
+      margin-top: 10px;
+      padding: 8px 16px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  
+    .gateway-details-section {
+      background: white;
+      padding: 25px;
+      border-radius: 15px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+      margin-bottom: 30px;
+    }
+  
+    .close-btn {
+      background: #ef4444;
+      color: white;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+  
+    .gateway-info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-bottom: 25px;
+    }
+  
+    .info-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 20px;
+      background: #f9fafb;
+    }
+  
+    .info-card h4 {
+      margin: 0 0 15px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+    }
+  
     .info-row {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 14px;
     }
-
+  
     .info-row span:first-child {
-        color: #718096;
+      color: #6b7280;
+      font-weight: 500;
     }
-
+  
     .info-row span:last-child {
-        font-weight: 600;
-        color: #2d3748;
+      color: #111827;
+      font-weight: 600;
     }
-
+  
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+  
+    .status-badge.active {
+      background: #d1fae5;
+      color: #065f46;
+    }
+  
+    .status-badge.inactive {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+  
+    .status-badge.maintenance {
+      background: #fef3c7;
+      color: #92400e;
+    }
+  
+    .devices-section h4 {
+      margin-bottom: 15px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+    }
+  
+    .devices-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 15px;
+    }
+  
+    .device-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 15px;
+      background: white;
+    }
+  
+    .device-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+  
+    .device-name {
+      font-weight: 600;
+      color: #374151;
+    }
+  
+    .device-status {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+  
+    .device-status.online {
+      background: #d1fae5;
+      color: #065f46;
+    }
+  
+    .device-status.offline {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+  
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+  
+    .detail-row span:first-child {
+      color: #6b7280;
+    }
+  
+    .detail-row span:last-child {
+      color: #374151;
+      font-weight: 500;
+    }
+  
     @media (max-width: 768px) {
-        .dashboard-content {
-            padding: 20px;
-        }
-
-        .devices-grid, .nodes-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .map-container {
-            height: 300px;
-        }
+      .dashboard-content {
+        padding: 20px;
+      }
+  
+      .filter-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+  
+      .filter-group {
+        justify-content: center;
+      }
+  
+      .legend {
+        justify-content: center;
+      }
+  
+      .map-container {
+        height: 400px;
+      }
+  
+      .gateway-info-grid, .devices-grid {
+        grid-template-columns: 1fr;
+      }
     }
-</style>
+  </style>

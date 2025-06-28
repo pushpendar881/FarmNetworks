@@ -104,7 +104,7 @@ export async function loadMastersData(sellerId = null) {
         }
 
         const { data: gatewaysData, error: gatewaysError } = await gatewayQuery;
-        console.log(gatewaysData)
+        // console.log(gatewaysData)
         if (gatewaysError) {
             throw gatewaysError;
         }
@@ -118,7 +118,7 @@ export async function loadMastersData(sellerId = null) {
                 }
             });
         });
-        console.log(allUserIds)
+        // console.log(allUserIds)
 
         // Fetch subscriptions for all users
         let subscriptionsData = [];
@@ -128,7 +128,7 @@ export async function loadMastersData(sellerId = null) {
                 .select('*')
                 .in('user_id', Array.from(allUserIds));
                 
-            console.log(subs)
+            // console.log(subs)
             if (subsError) {
                 console.warn('Error fetching subscriptions:', subsError);
             } else {
@@ -306,7 +306,7 @@ export async function loadEarningsData(sellerId) {
         const thisMonthSubs = subscriptions.filter(sub => 
             new Date(sub.recharge_date) >= startOfMonth
         );
-        console.log(thisMonthSubs)
+        // console.log(thisMonthSubs)
         const thisMonthEarnings = thisMonthSubs.reduce((sum, sub) => 
             sum + (sub.commission_amount || 0), 0
         );

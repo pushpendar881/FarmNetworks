@@ -13,6 +13,7 @@
     } from '$lib/stores/seller/dashboard.js';
 import { sellerStore } from '$lib/stores/sellerStore.js';
 
+
 let sellerId = null;
 
 onMount(async () => {
@@ -20,6 +21,7 @@ onMount(async () => {
     sellerId = seller?.profile?.id;
     if (sellerId) {
         await earningsActions.init(sellerId);
+        await loadChartData();
     } else {
         console.warn('Seller ID not found. Please check authentication.');
     }
@@ -28,6 +30,11 @@ onMount(async () => {
 
     let selectedMonthValue = new Date().toISOString().slice(0, 7);
     let monthOptions = [];
+    
+    // Chart data and configuration
+    let localChartData = [];
+    let chartOptions = {};
+    let chartLoading = true;
     
     // Generate month options (last 12 months)
     function generateMonthOptions() {
@@ -47,10 +54,95 @@ onMount(async () => {
         return options;
     }
     
+    // Load chart data from Supabase
+    async function loadChartData() {
+        try {
+            chartLoading = true;
+            
+            // Fetch subscription data for the chart
+            const { data: subscriptions, error } = await supabase
+                .from('subscriptions')
+                .select('plan_type, payment_status, amount')
+                .eq('sold_by', sellerId)
+                .gte('created_at', new Date(selectedMonthValue + '-01').toISOString())
+                .lt('created_at', new Date(new Date(selectedMonthValue + '-01').getFullYear(), new Date(selectedMonthValue + '-01').getMonth() + 1, 1).toISOString());
+            
+            if (error) throw error;
+            
+            // Process data for pie chart
+            const planTypeStats = {};
+            subscriptions.forEach(sub => {
+                if (sub.payment_status === 'completed') {
+                    planTypeStats[sub.plan_type] = (planTypeStats[sub.plan_type] || 0) + 1;
+                }
+            });
+            
+            const total = Object.values(planTypeStats).reduce((sum, count) => sum + count, 0);
+            const chartSeries = Object.values(planTypeStats);
+            const chartLabels = Object.keys(planTypeStats).map(key => 
+                key.charAt(0).toUpperCase() + key.slice(1)
+            );
+            
+            // Calculate percentages
+            const percentages = chartSeries.map(value => ((value / total) * 100).toFixed(1));
+            
+            localChartData = chartSeries;
+            chartOptions = {
+                series: chartSeries,
+                colors: ["#1C64F2", "#16BDCA", "#9061F9", "#F05252", "#10B981"],
+                chart: {
+                    height: 320,
+                    width: "100%",
+                    type: "pie",
+                    fontFamily: "Inter, sans-serif"
+                },
+                stroke: {
+                    colors: ["white"],
+                    lineCap: "round"
+                },
+                plotOptions: {
+                    pie: {
+                        dataLabels: {
+                            offset: -25
+                        }
+                    }
+                },
+                labels: chartLabels,
+                dataLabels: {
+                    enabled: true,
+                    style: {
+                        fontFamily: "Inter, sans-serif"
+                    },
+                    formatter: function(val, opts) {
+                        return percentages[opts.seriesIndex] + "%";
+                    }
+                },
+                legend: {
+                    position: "bottom",
+                    fontFamily: "Inter, sans-serif",
+                    fontSize: "14px"
+                },
+                tooltip: {
+                    y: {
+                        formatter: function(value) {
+                            return value + " subscriptions";
+                        }
+                    }
+                }
+            };
+            
+        } catch (err) {
+            console.error('Error loading chart data:', err);
+        } finally {
+            chartLoading = false;
+        }
+    }
+    
     // Handle month change
     async function handleMonthChange(event) {
         selectedMonthValue = event.target.value;
         await earningsActions.updateMonth(selectedMonthValue);
+        await loadChartData();
     }
     
     // Handle export
@@ -62,10 +154,14 @@ onMount(async () => {
     $: if ($selectedMonth !== selectedMonthValue) {
         selectedMonthValue = $selectedMonth;
     }
+
+   
+   
 </script>
 
 <svelte:head>
     <title>Earnings & Reports - Device Management System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.45.1/apexcharts.min.js"></script>
 </svelte:head>
 
 <Header title="Earnings & Reports" />
@@ -136,6 +232,55 @@ onMount(async () => {
         {/if}
     </div>
 
+    <!-- Subscription Plan Distribution Chart -->
+    <div class="earnings-section">
+        <div class="section-header">
+            <div class="chart-header-content">
+                <div class="chart-title-container">
+                    <h3 class="section-title">Subscription Distribution</h3>
+                    <div class="info-icon" title="Shows distribution of subscription plans sold this month">ℹ️</div>
+                </div>
+                <div class="chart-actions">
+                    <button class="action-btn">⋯</button>
+                </div>
+            </div>
+        </div>
+
+        {#if chartLoading}
+            <div class="chart-loading">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading chart data...</p>
+                </div>
+            </div>
+        {:else if localChartData.length === 0}
+            <div class="empty-chart">
+                <div class="empty-icon">📊</div>
+                <h4>No subscription data</h4>
+                <p>No completed subscriptions found for the selected period.</p>
+            </div>
+        {:else}
+            <div class="chart-container">
+                <div id="subscription-chart"></div>
+            </div>
+            
+            <div class="chart-footer">
+                <div class="chart-period">
+                    <select class="period-select" bind:value={selectedMonthValue} on:change={handleMonthChange}>
+                        {#each monthOptions as option}
+                            <option value={option.value}>{option.label}</option>
+                        {/each}
+                    </select>
+                </div>
+                <div class="chart-link">
+                    <a href="/seller/analytics" class="analytics-link">
+                        Detailed Analytics →
+                    </a>
+                </div>
+            </div>
+        {/if}
+    </div>
+
     <!-- Recent Transactions -->
     <div class="earnings-section">
         <div class="section-header">
@@ -191,7 +336,7 @@ onMount(async () => {
     </div>
 
     <!-- Monthly breakdown -->
-    <div class="earnings-section">
+    <!-- <div class="earnings-section">
         <div class="section-header">
             <h3 class="section-title">Monthly Breakdown</h3>
         </div>
@@ -210,7 +355,7 @@ onMount(async () => {
                 <div class="chart-title">Earnings Chart</div>
                 <div class="chart-subtitle">Monthly earnings and recharge trends</div>
                 <div class="chart-bars">
-                    {#each $chartData.slice(-6) as bar}
+                    {#each $localChartData.slice(-6) as bar}
                         <div 
                             class="bar {bar.name === selectedMonthValue.slice(-2) ? 'active' : ''}" 
                             style="height: {bar.height}%"
@@ -222,8 +367,24 @@ onMount(async () => {
                 </div>
             </div>
         {/if}
-    </div>
+    </div> -->
+ 
 </div>
+
+{#if localChartData.length > 0}
+    <script>
+        // Initialize ApexCharts after component mounts and data is loaded
+        setTimeout(() => {
+            if (window.ApexCharts && chartOptions.series) {
+                const chart = new ApexCharts(
+                    document.querySelector("#subscription-chart"), 
+                    chartOptions
+                );
+                chart.render();
+            }
+        }, 100);
+    </script>
+{/if}
 
 <style>
     .dashboard-content {
@@ -329,6 +490,134 @@ onMount(async () => {
         color: #718096;
         font-size: 14px;
         font-weight: 500;
+    }
+
+    /* Chart Styles */
+    .chart-header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
+
+    .chart-title-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .info-icon {
+        font-size: 14px;
+        color: #718096;
+        cursor: help;
+    }
+
+    .chart-actions {
+        display: flex;
+        align-items: center;
+    }
+
+    .action-btn {
+        background: none;
+        border: none;
+        font-size: 18px;
+        color: #718096;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease;
+    }
+
+    .action-btn:hover {
+        background: #f7fafc;
+        color: #4a5568;
+    }
+
+    .chart-container {
+        min-height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #subscription-chart {
+        width: 100%;
+        height: 320px;
+    }
+
+    .chart-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 20px;
+    }
+
+    .period-select {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: transparent;
+        color: #718096;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .period-select:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .analytics-link {
+        color: #667eea;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .analytics-link:hover {
+        background: #667eea10;
+        text-decoration: none;
+    }
+
+    .chart-loading {
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #718096;
+    }
+
+    .empty-chart {
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #718096;
+        text-align: center;
+    }
+
+    .empty-chart .empty-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
+
+    .empty-chart h4 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #4a5568;
+    }
+
+    .empty-chart p {
+        font-size: 14px;
     }
 
     .transactions-table {
@@ -593,6 +882,12 @@ onMount(async () => {
             gap: 15px;
         }
 
+        .chart-header-content {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
         .earnings-filter {
             width: 100%;
             justify-content: space-between;
@@ -631,6 +926,11 @@ onMount(async () => {
 
         .bar {
             width: 30px;
+        }
+
+        .chart-footer {
+            flex-direction: column;
+            gap: 15px;
         }
     }
 
