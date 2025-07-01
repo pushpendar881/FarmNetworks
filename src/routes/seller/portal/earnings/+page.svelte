@@ -50,7 +50,7 @@ onMount(async () => {
             });
             options.push({ value, label });
         }
-        
+        // console.log(options);
         return options;
     }
     
@@ -140,9 +140,8 @@ onMount(async () => {
     
     // Handle month change
     async function handleMonthChange(event) {
-        selectedMonthValue = event.target.value;
         await earningsActions.updateMonth(selectedMonthValue);
-        await loadChartData();
+        // await loadChartData();
     }
     
     // Handle export
