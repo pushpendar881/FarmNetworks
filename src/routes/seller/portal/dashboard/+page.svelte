@@ -312,43 +312,43 @@
         }
 
         // Monthly Earnings Chart
-        if (earningsChartCanvas && monthlyEarningsData.length > 0) {
-            const ctx = earningsChartCanvas.getContext('2d');
-            earningsChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: monthlyEarningsData.map(d => d.month),
-                    datasets: [{
-                        label: 'Monthly Earnings (₹)',
-                        data: monthlyEarningsData.map(d => d.earnings),
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        borderWidth: 3,
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                callback: function(value) {
-                                    return '₹' + value;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
+        // if (earningsChartCanvas && monthlyEarningsData.length > 0) {
+        //     const ctx = earningsChartCanvas.getContext('2d');
+        //     earningsChart = new Chart(ctx, {
+        //         type: 'line',
+        //         data: {
+        //             labels: monthlyEarningsData.map(d => d.month),
+        //             datasets: [{
+        //                 label: 'Monthly Earnings (₹)',
+        //                 data: monthlyEarningsData.map(d => d.earnings),
+        //                 borderColor: '#10b981',
+        //                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        //                 borderWidth: 3,
+        //                 fill: true,
+        //                 tension: 0.4
+        //             }]
+        //         },
+        //         options: {
+        //             responsive: true,
+        //             maintainAspectRatio: false,
+        //             plugins: {
+        //                 legend: {
+        //                     display: true
+        //                 }
+        //             },
+        //             scales: {
+        //                 y: {
+        //                     beginAtZero: true,
+        //                     ticks: {
+        //                         callback: function(value) {
+        //                             return '₹' + value;
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     });
+        // }
     }
 
     function updateCharts() {
@@ -490,7 +490,7 @@
         </div>
 
         <!-- Earnings Chart (if seller has earnings) -->
-        {#if $earnings.totalEarnings > 0 || $loading.earnings}
+        <!-- {#if $earnings.totalEarnings > 0 || $loading.earnings}
             <div class="earnings-section">
                 <div class="section-header">
                     <h3 class="section-title">Earnings Overview</h3>
@@ -539,7 +539,7 @@
                         </div>
                     </div>
 
-                    <!-- Monthly Earnings Chart -->
+                   
                     <div class="chart-card earnings-chart">
                         <h3 class="chart-title">Monthly Earnings Trend</h3>
                         <div class="chart-container">
@@ -548,7 +548,7 @@
                     </div>
                 </div>
             </div>
-        {/if}
+        {/if} -->
 
         <!-- Recent Alerts Section -->
         {#if recentAlerts.length > 0}
