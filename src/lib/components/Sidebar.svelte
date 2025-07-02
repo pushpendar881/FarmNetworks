@@ -38,7 +38,7 @@
 
 <nav class="sidebar">
     <div class="logo">
-        <h1>DeviceNet</h1>
+        <h1>FarmNetwork</h1>
         <p>Seller Dashboard v1.0</p>
     </div>
     <ul class="nav-menu">

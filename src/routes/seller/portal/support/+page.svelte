@@ -8,7 +8,7 @@
   
   <div class="support-container">
     <h1>Support</h1>
-    <p class="text-black">Get help and support for your DeviceNet seller account.</p>
+    <p class="text-black">Get help and support for your FarmNetwork seller account.</p>
     
     <div class="support-sections">
       <!-- <section class="support-section">
