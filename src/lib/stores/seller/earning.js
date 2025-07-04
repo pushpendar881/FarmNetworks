@@ -47,16 +47,21 @@ export async function getSellerEarnings(sellerId, month = null) {
     }
     
     // Calculate earnings metrics
-    const thisMonthEarnings = subscriptions?.reduce((sum, sub) => 
-      sum + (parseFloat(sub.commission_amount) || 0), 0
-    ) || 0;
+    const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
+      // console.log(sub?.commission_amount/100);
+      const amount = parseFloat(sub?.amount);
+      return sum + (isNaN(amount) ? 0 : amount * sub?.commission_amount/100);
+    }, 0) || 0;
     
+    
+    
+    console.log(thisMonthEarnings)
     const devicesRecharged = subscriptions?.length || 0;
     
     const totalRechargeAmount = subscriptions?.reduce((sum, sub) => 
       sum + (parseFloat(sub.amount) || 0), 0
     ) || 0;
-    
+    console.log(totalRechargeAmount)
     // Get seller profile data
     const { data: sellerData } = await supabase
       .from('seller_profiles')
@@ -64,13 +69,14 @@ export async function getSellerEarnings(sellerId, month = null) {
       .eq('id', sellerId)
       .maybeSingle();
     
-    const commissionRate = parseFloat(sellerData?.commission_rate) || 5;
+    const commissionRate = parseFloat(sellerData?.commission_rate) || 10;
     const rechargeRate = devicesRecharged > 0 ? 100 : 0;
     
     // Format recent transactions
     const recentTransactions = subscriptions?.slice(0, 10).map(sub => {
+
       const firstDevice = sub.devices && sub.devices.length > 0 ? sub.devices[0] : null;
-      
+      console.log(firstDevice)
       return {
         date: new Date(sub.recharge_date).toLocaleDateString('en-IN', {
           day: '2-digit',
@@ -78,7 +84,7 @@ export async function getSellerEarnings(sellerId, month = null) {
           year: 'numeric'
         }),
         deviceId: firstDevice?.device_id || 'N/A',
-        deviceName: firstDevice?.device_name || 'N/A',
+         deviceName: firstDevice?.device_name || 'N/A',
         rechargeAmount: parseFloat(sub.amount) || 0,
         commission: parseFloat(sub.commission_amount) || 0,
         status: sub.payment_status === 'completed' ? 'Completed' : 'Pending',

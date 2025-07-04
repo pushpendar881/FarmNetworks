@@ -20,6 +20,7 @@
         
         // Chart variables
         let subscriptionChart = null;
+        let sub=null;
         let earningsChart = null;
         let chartLoading = false;
         let localChartData = [];
@@ -184,8 +185,8 @@
         return;
     }
     
-    // Rest of your chart options...
-    const chartOptions = {
+    // PIE CHART 
+    const chartOptions1 = {
         series: localChartData.map(d => d.value),
         colors: ["#1C64F2", "#16BDCA", "#9061F9", "#F05252", "#10B981"],
         chart: {
@@ -228,10 +229,105 @@
             }
         }
     };
+
+    //  BAR CHART
+    const chartOptions = {
+    series: [{
+        name: "Subscriptions",
+        data: localChartData.map(d => d.value)
+    }],
+    colors: ["#1C64F2"],
+    chart: {
+        type: "bar",
+        height: 320,
+        fontFamily: "Inter, sans-serif"
+    },
+    xaxis: {
+        categories: localChartData.map(d => d.name),
+        labels: {
+            style: {
+                fontFamily: "Inter, sans-serif"
+            }
+        }
+    },
+    dataLabels: {
+        enabled: true,
+        formatter: function(val, opts) {
+            return localChartData[opts.dataPointIndex].percentage + "%";
+        },
+        style: {
+            fontFamily: "Inter, sans-serif"
+        }
+    },
+    legend: {
+        position: "bottom",
+        fontFamily: "Inter, sans-serif",
+        fontSize: "14px"
+    },
+    tooltip: {
+        y: {
+            formatter: function(value) {
+                return value + " subscriptions";
+            }
+        }
+    }
+};
+
+// LINE CHART 
+// const chartOptions = {
+//     series: [{
+//         name: "Subscriptions",
+//         data: localChartData.map(d => d.value)
+//     }],
+//     colors: ["#16BDCA"],
+//     chart: {
+//         type: "line",
+//         height: 320,
+//         fontFamily: "Inter, sans-serif"
+//     },
+//     xaxis: {
+//         categories: localChartData.map(d => d.name),
+//         labels: {
+//             style: {
+//                 fontFamily: "Inter, sans-serif"
+//             }
+//         }
+//     },
+//     stroke: {
+//         curve: "smooth",
+//         width: 3
+//     },
+//     dataLabels: {
+//         enabled: true,
+//         formatter: function(val, opts) {
+//             return localChartData[opts.dataPointIndex].percentage + "%";
+//         },
+//         style: {
+//             fontFamily: "Inter, sans-serif"
+//         }
+//     },
+//     legend: {
+//         position: "bottom",
+//         fontFamily: "Inter, sans-serif",
+//         fontSize: "14px"
+//     },
+//     tooltip: {
+//         y: {
+//             formatter: function(value) {
+//                 return value + " subscriptions";
+//             }
+//         }
+//     }
+// };
+
+
+    
     
     try {
         subscriptionChart = new ApexCharts(chartElement, chartOptions);
+        // sub=new ApexCharts(chartElement, chartOptions1);
         subscriptionChart.render();
+        // sub.render();
         console.log('Chart rendered successfully');
     } catch (error) {
         console.error('Error rendering subscription chart:', error);
@@ -243,6 +339,10 @@
                 subscriptionChart.destroy();
                 subscriptionChart = null;
             }
+            // if(sub){
+            //     sub.destroy();
+            //     sub  = null;
+            // }
             if (earningsChart) {
                 earningsChart.destroy();
                 earningsChart = null;
@@ -447,8 +547,8 @@
                         <thead>
                             <tr>
                                 <th>Date</th>
-                                <th>Device ID</th>
-                                <th>Customer</th>
+                                <!-- <th>Device ID</th>
+                                <th>Customer</th> -->
                                 <th>Plan</th>
                                 <th>Recharge Amount</th>
                                 <th>Commission</th>
@@ -459,8 +559,8 @@
                             {#each $earnings.recentTransactions as transaction}
                                 <tr>
                                     <td>{transaction.date}</td>
-                                    <td>{transaction.deviceId}</td>
-                                    <td>{transaction.customerName}</td>
+                                    <!-- <td>{transaction.deviceName}</td>
+                                    <td>{transaction.customerName}</td> -->
                                     <td>{transaction.planName}</td>
                                     <td>{formatCurrency(transaction.rechargeAmount)}</td>
                                     <td>{formatCurrency(transaction.commission)}</td>

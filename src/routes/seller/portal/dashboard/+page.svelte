@@ -254,7 +254,7 @@
         if (monthlyChartCanvas) {
             const ctx = monthlyChartCanvas.getContext('2d');
             monthlyChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'radar', //bar , line , doughnut,radar,
                 data: {
                     labels: monthlyGrowthData.map(d => d.month),
                     datasets: [{
