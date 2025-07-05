@@ -214,54 +214,68 @@ export const authStore = {
     if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
     loading.set(true);
+    
     try {
-      console.log('👤 Creating seller account:', formData.email);
-      
-      if (!formData.email || !formData.password || !formData.fullName) {
-        return { 
-          success: false, 
-          error: 'Email, password, and full name are required' 
-        };
+      // Only validate email and password (auth requirements)
+      if (!formData.email || !formData.password) {
+        return { success: false, error: 'Email and password required' };
       }
       
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email.trim().toLowerCase(),
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
         password: formData.password,
         options: {
           data: {
             user_type: 'seller',
-            full_name: formData.fullName,
-            business_name: formData.businessName || '',
-            phone: formData.phone || '',
-            username: formData.username || ''
+            full_name: formData.fullName
           }
         }
       });
+      console.log("hii")
+     
+      if (authError) return { success: false, error: authError.message };
+      console.log("hii")
+
+      if (!authData?.user) return { success: false, error: 'Failed to create account' };
   
-      console.log('Seller signup response:', { 
-        hasUser: !!data?.user,
-        needsConfirmation: !data?.session,
-        error: error?.message 
+      const userId = authData.user.id;
+      const adminId = "95656152-4385-4e73-a486-3ee6546ac21a";
+  
+      // Create user profile with form data
+      await supabase.from('user_profiles').insert({
+        id: userId,
+        email: formData.email,
+        full_name: formData.fullName,
+        phone: formData.phone,
+        role: 'seller',
+        is_active: true,
+        is_verified: false
       });
+      console.log("hii");
   
-      if (error) {
-        if (error.message.includes('User already registered')) {
-          return { 
-            success: false, 
-            error: 'An account with this email already exists. Please sign in instead.' 
-          };
-        }
-        return { success: false, error: error.message };
-      }
-      
-      return { 
-        success: true, 
-        data,
-        needsConfirmation: !data?.session
-      };
-    } catch (err) {
-      console.error('Seller signup error:', err);
-      return { success: false, error: err.message };
+      // Create seller profile with ALL fields from schema
+      await supabase.from('seller_profiles').insert({
+        id: userId,
+        business_name: formData.businessName,
+        business_type: formData.businessType || null,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        gstin: formData.gstin || null,
+        commission_rate: 10.00,
+        total_sales: 0.00,
+        rating: 0.00,
+        created_by: adminId,
+        approved_by: adminId,
+        approved_at: null
+      });
+  console.log("hii");
+      return { success: true, data: authData };
+  
+    } catch (error) {
+      return { success: false, error: 'Something went wrong' };
     } finally {
       loading.set(false);
     }
@@ -753,7 +767,7 @@ export const authStore = {
     
     try {
       console.log('Updating seller profile for:', sellerId);
-      
+      const adminId="95656152-4385-4e73-a486-3ee6546ac21a";
       // First, check current user and permissions
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
@@ -800,6 +814,8 @@ export const authStore = {
         pincode: updateData.pincode,
         gstin: updateData.gstin,
         commission_rate: updateData.commission_rate ? parseFloat(updateData.commission_rate) : undefined,
+        created_by:adminId,
+        approved_by:adminId,
         updated_at: new Date().toISOString()
       };
       

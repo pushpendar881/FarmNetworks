@@ -77,9 +77,9 @@
         try {
             // First, get the admin who will manage this gateway
             const { data: adminProfiles, error: adminError } = await supabase
-                .from('admin_profiles')
-                .select('id')
-                .limit(1);
+                .from('seller_profiles')
+                .select('created_by')
+                
             
             if (adminError || !adminProfiles || adminProfiles.length === 0) {
                 throw new Error('No admin found to manage the gateway');
@@ -124,7 +124,7 @@
             
             // Redirect to dashboard after 2 seconds
             setTimeout(() => {
-                goto('/seller/dashboard');
+                goto('/seller/portal/dashboard');
             }, 2000);
             
         } catch (error) {
