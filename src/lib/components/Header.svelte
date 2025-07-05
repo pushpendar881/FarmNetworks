@@ -5,7 +5,8 @@
     export let title = 'Dashboard';
     
     function showNotifications() {
-        alert('Notifications:\n\n• 3 devices need recharge within 5 days\n• New master installation request\n• Monthly earnings report available');
+
+        // alert('Notifications:\n\n• 3 devices need recharge within 5 days\n• New master installation request\n• Monthly earnings report available');
     }
     
     function navigateToProfile() {

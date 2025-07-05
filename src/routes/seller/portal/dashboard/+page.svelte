@@ -15,6 +15,7 @@
     import { sellerStore, currentSeller } from '$lib/stores/sellerStore.js';
     import { user } from '$lib/stores/auth.js';
     import { supabase } from '$lib/supabase.js';
+    import { goto } from '$app/navigation';
     
     let showAllMasters = false;
     let sellerProfile = null;
@@ -39,6 +40,10 @@
     function toggleAllMasters() {
         showAllMasters = !showAllMasters;
     }
+    function navigateToAddMaster() {
+    goto('/seller/portal/add-master');
+}
+
     
     $: displayedMasters = showAllMasters ? $masters : $masters.slice(0, 2);
 
@@ -254,7 +259,7 @@
         if (monthlyChartCanvas) {
             const ctx = monthlyChartCanvas.getContext('2d');
             monthlyChart = new Chart(ctx, {
-                type: 'radar', //bar , line , doughnut,radar,
+                type: 'line', //bar , line , doughnut,radar,
                 data: {
                     labels: monthlyGrowthData.map(d => d.month),
                     datasets: [{
@@ -418,6 +423,8 @@
                     🔄 Refresh Data
                 {/if}
             </button>
+
+           
         </div>
 
         {#if dashboardError}
@@ -584,9 +591,14 @@
         <div class="masters-section">
             <div class="section-header">
                 <h3 class="section-title">Masters & Connected Devices</h3>
-                {#if $error.masters}
-                    <span class="error-badge">Error loading masters</span>
-                {/if}
+                <div class="section-actions">
+                    <button class="add-master-btn" on:click={navigateToAddMaster}>
+                        ➕ Add Master
+                    </button>
+                    {#if $error.masters}
+                        <span class="error-badge">Error loading masters</span>
+                    {/if}
+                </div>
             </div>
 
             {#if $loading.masters}
@@ -637,6 +649,8 @@
     .dashboard-controls {
         display: flex;
         justify-content: space-between;
+        /* gap: 10px; */
+        /* padding-right: 40px; */
         align-items: center;
         margin-bottom: 25px;
     }
@@ -795,6 +809,43 @@
     .earnings-chart .chart-container {
         height: 250px;
     }
+    .section-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.add-master-btn {
+    background: #10b981;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.3s ease;
+}
+
+.add-master-btn:hover {
+    background: #059669;
+}
+
+@media (max-width: 600px) {
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .section-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
 
     .alerts-section {
         background: white;
