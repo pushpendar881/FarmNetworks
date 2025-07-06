@@ -8,7 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export const PUBLIC_SUPABASE_URL = supabaseUrl;
 
 /**
- * Get seller earnings data from Supabase
+ * Get seller earnings data from Supabase - Updated for new schema
  * @param {string} sellerId - UUID of the seller
  * @param {string} month - Month in format 'YYYY-MM' (optional, defaults to current month)
  * @returns {Object} Earnings data object
@@ -29,43 +29,50 @@ export async function getSellerEarnings(sellerId, month = null) {
     
     console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
     
-    // First try to get subscriptions using the view
+    // Get subscriptions for this seller in the specified month
     const { data: subscriptions, error: subscriptionsError } = await supabase
-      .from('subscription_details')
-      .select('*')
-      .eq('sold_by', sellerId)
+      .from('subscriptions')
+      .select(`
+        *,
+        devices (
+          device_id,
+          device_name,
+          customer_name,
+          customer_phone,
+          customer_email
+        )
+      `)
+      .eq('seller_id', sellerId)
       .eq('payment_status', 'completed')
-      .gte('recharge_date', startDate.toISOString().split('T')[0])
-      .lt('recharge_date', endDate.toISOString().split('T')[0])
-      .order('recharge_date', { ascending: false });
+      .gte('valid_from', startDate.toISOString())
+      .lt('valid_from', endDate.toISOString())
+      .order('valid_from', { ascending: false });
       
     console.log('Subscription query result:', { subscriptions, subscriptionsError });
     
     if (subscriptionsError) {
-      console.log('Subscription details view failed, trying fallback');
-      return await getSellerEarningsFallback(sellerId, month);
+      console.error('Error fetching subscriptions:', subscriptionsError);
+      throw subscriptionsError;
     }
     
     // Calculate earnings metrics
     const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
-      // console.log(sub?.commission_amount/100);
-      const amount = parseFloat(sub?.amount);
-      return sum + (isNaN(amount) ? 0 : amount * sub?.commission_amount/100);
+      const amount = parseFloat(sub?.commission_amount) || 0;
+      return sum + amount;
     }, 0) || 0;
     
-    
-    
-    console.log(thisMonthEarnings)
+    console.log('This month earnings:', thisMonthEarnings);
     const devicesRecharged = subscriptions?.length || 0;
     
     const totalRechargeAmount = subscriptions?.reduce((sum, sub) => 
       sum + (parseFloat(sub.amount) || 0), 0
     ) || 0;
-    console.log(totalRechargeAmount)
+    console.log('Total recharge amount:', totalRechargeAmount);
+    
     // Get seller profile data
     const { data: sellerData } = await supabase
       .from('seller_profiles')
-      .select('commission_rate, total_sales, rating')
+      .select('commission_rate, total_sales')
       .eq('id', sellerId)
       .maybeSingle();
     
@@ -74,21 +81,19 @@ export async function getSellerEarnings(sellerId, month = null) {
     
     // Format recent transactions
     const recentTransactions = subscriptions?.slice(0, 10).map(sub => {
-
-      const firstDevice = sub.devices && sub.devices.length > 0 ? sub.devices[0] : null;
-      console.log(firstDevice)
+      const device = sub.devices || {};
       return {
-        date: new Date(sub.recharge_date).toLocaleDateString('en-IN', {
+        date: new Date(sub.valid_from).toLocaleDateString('en-IN', {
           day: '2-digit',
           month: 'short',
           year: 'numeric'
         }),
-        deviceId: firstDevice?.device_id || 'N/A',
-         deviceName: firstDevice?.device_name || 'N/A',
+        deviceId: device.device_id || 'N/A',
+        deviceName: device.device_name || 'N/A',
         rechargeAmount: parseFloat(sub.amount) || 0,
         commission: parseFloat(sub.commission_amount) || 0,
         status: sub.payment_status === 'completed' ? 'Completed' : 'Pending',
-        customerName: sub.full_name || 'Unknown',
+        customerName: device.customer_name || 'Unknown',
         planName: sub.plan_name || 'Unknown Plan'
       };
     }) || [];
@@ -113,196 +118,131 @@ export async function getSellerEarnings(sellerId, month = null) {
 }
 
 /**
- * Fallback method when subscription_details view is not available
+ * Export seller earnings data as CSV - Updated for new schema
  * @param {string} sellerId - UUID of the seller
  * @param {string} month - Month in format 'YYYY-MM'
- * @returns {Object} Earnings data object
+ * @returns {string} CSV content
  */
-export async function getSellerEarningsFallback(sellerId, month = null) {
+export async function exportSellerEarnings(sellerId, month = null) {
   try {
+    if (!sellerId) {
+      throw new Error('Seller ID is required');
+    }
+    
     const targetMonth = month || new Date().toISOString().slice(0, 7);
     const [year, monthNum] = targetMonth.split('-').map(Number);
     const startDate = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0));
     const endDate = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0));
     
-    console.log('Using fallback method for seller:', sellerId);
-    
-    // Get subscriptions from main table
-    const { data: subscriptions, error: subError } = await supabase
+    // Get subscriptions with device details
+    const { data: subscriptions, error } = await supabase
       .from('subscriptions')
       .select(`
-        id,
-        amount,
-        plan_type,
-        payment_status,
-        created_at,
-        customer_id,
-        device_ids
+        *,
+        devices (
+          device_id,
+          device_name,
+          customer_name,
+          customer_phone,
+          customer_email
+        )
       `)
-      .eq('sold_by', sellerId)
+      .eq('seller_id', sellerId)
       .eq('payment_status', 'completed')
-      .gte('created_at', startDate.toISOString())
-      .lt('created_at', endDate.toISOString())
-      .order('created_at', { ascending: false });
+      .gte('valid_from', startDate.toISOString())
+      .lt('valid_from', endDate.toISOString())
+      .order('valid_from', { ascending: false });
     
-    if (subError) {
-      console.error('Fallback subscription query failed:', subError);
-      throw subError;
+    if (error) {
+      throw error;
     }
     
-    // Get seller profile data
-    const { data: sellerData } = await supabase
-      .from('seller_profiles')
-      .select('commission_rate, total_sales, rating')
-      .eq('id', sellerId)
-      .maybeSingle();
-    
-    const commissionRate = parseFloat(sellerData?.commission_rate) || 5;
-    
-    // Calculate earnings
-    const totalRechargeAmount = subscriptions?.reduce((sum, sub) => 
-      sum + (parseFloat(sub.amount) || 0), 0
-    ) || 0;
-    
-    const thisMonthEarnings = totalRechargeAmount * (commissionRate / 100);
-    const devicesRecharged = subscriptions?.length || 0;
-    const rechargeRate = devicesRecharged > 0 ? 100 : 0;
-    
-    // Get customer details for recent transactions
-    const customerIds = [...new Set(subscriptions?.map(sub => sub.customer_id).filter(Boolean))];
-    const { data: customers } = await supabase
-      .from('profiles')
-      .select('id, full_name')
-      .in('id', customerIds);
-    
-    const customerMap = customers?.reduce((map, customer) => {
-      map[customer.id] = customer.full_name;
-      return map;
-    }, {}) || {};
-    
-    // Format recent transactions
-    const recentTransactions = subscriptions?.slice(0, 10).map(sub => ({
-      date: new Date(sub.created_at).toLocaleDateString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      }),
-      deviceId: sub.device_ids?.[0] || 'N/A',
-      deviceName: 'Device', // Would need device lookup for actual name
-      rechargeAmount: parseFloat(sub.amount) || 0,
-      commission: (parseFloat(sub.amount) || 0) * (commissionRate / 100),
-      status: 'Completed',
-      customerName: customerMap[sub.customer_id] || 'Unknown',
-      planName: sub.plan_type?.replace('_', ' ').toUpperCase() || 'Unknown Plan'
-    })) || [];
-    
-    const result = {
-      thisMonth: Math.round(thisMonthEarnings),
-      devicesRecharged,
-      totalRechargeAmount: Math.round(totalRechargeAmount),
-      rechargeRate,
-      commissionRate,
-      recentTransactions,
-      subscriptions: subscriptions || []
-    };
-    
-    console.log('Fallback earnings result:', result);
-    return result;
-    
-  } catch (error) {
-    console.error('Error in getSellerEarningsFallback:', error);
-    
-    // Return empty data structure if all else fails
-    return {
-      thisMonth: 0,
-      devicesRecharged: 0,
-      totalRechargeAmount: 0,
-      rechargeRate: 0,
-      commissionRate: 5,
-      recentTransactions: [],
-      subscriptions: []
-    };
-  }
-}
-
-/**
- * Export seller earnings data to CSV
- * @param {string} sellerId - UUID of the seller
- * @param {string} month - Month in format 'YYYY-MM'
- * @returns {string} CSV data
- */
-export async function exportSellerEarnings(sellerId, month = null) {
-  try {
-    const earningsData = await getSellerEarnings(sellerId, month);
-    
-    if (!earningsData.recentTransactions.length) {
-      throw new Error('No transactions found for the selected period');
+    if (!subscriptions || subscriptions.length === 0) {
+      return 'Date,Device ID,Device Name,Customer Name,Customer Phone,Customer Email,Plan Name,Amount,Commission,Status\nNo data found for the selected period';
     }
     
-    // CSV headers
-    const headers = [
-      'Date',
-      'Device ID',
-      'Customer Name',
-      'Plan Name',
-      'Recharge Amount (₹)',
-      'Commission (₹)',
-      'Status'
-    ];
+    // Create CSV content
+    const csvHeader = 'Date,Device ID,Device Name,Customer Name,Customer Phone,Customer Email,Plan Name,Amount,Commission,Status\n';
+    const csvRows = subscriptions.map(sub => {
+      const device = sub.devices || {};
+      const date = new Date(sub.valid_from).toLocaleDateString('en-IN');
+      const amount = parseFloat(sub.amount) || 0;
+      const commission = parseFloat(sub.commission_amount) || 0;
+      
+      return [
+        date,
+        device.device_id || 'N/A',
+        device.device_name || 'N/A',
+        device.customer_name || 'Unknown',
+        device.customer_phone || 'N/A',
+        device.customer_email || 'N/A',
+        sub.plan_name || 'Unknown Plan',
+        amount.toFixed(2),
+        commission.toFixed(2),
+        sub.payment_status
+      ].map(field => `"${field}"`).join(',');
+    }).join('\n');
     
-    // Convert transactions to CSV rows
-    const rows = earningsData.recentTransactions.map(transaction => [
-      transaction.date,
-      transaction.deviceId,
-      transaction.customerName,
-      transaction.planName,
-      transaction.rechargeAmount,
-      transaction.commission,
-      transaction.status
-    ]);
-    
-    // Combine headers and rows
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
-    
-    return csvContent;
+    return csvHeader + csvRows;
     
   } catch (error) {
     console.error('Error exporting earnings:', error);
-    throw error;
+    return `Error: ${error.message}`;
   }
 }
 
 /**
- * Get earnings summary for multiple months
+ * Get seller earnings summary for multiple months - Updated for new schema
  * @param {string} sellerId - UUID of the seller
- * @param {number} monthsBack - Number of months to go back (default: 6)
- * @returns {Array} Array of monthly earnings data
+ * @param {number} monthsBack - Number of months to look back
+ * @returns {Array} Monthly breakdown data
  */
 export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
   try {
-    const summaryPromises = [];
-    const now = new Date();
-    
-    for (let i = 0; i < monthsBack; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthStr = date.toISOString().slice(0, 7);
-      summaryPromises.push(getSellerEarnings(sellerId, monthStr));
+    if (!sellerId) {
+      throw new Error('Seller ID is required');
     }
     
-    const results = await Promise.all(summaryPromises);
+    const monthlyBreakdown = [];
+    const currentDate = new Date();
     
-    return results.map((data, index) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - index, 1);
-      return {
-        month: date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
-        monthValue: date.toISOString().slice(0, 7),
-        earnings: data.thisMonth,
-        devices: data.devicesRecharged,
-        totalAmount: data.totalRechargeAmount
-      };
-    });
+    for (let i = 0; i < monthsBack; i++) {
+      const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      const monthKey = targetDate.toISOString().slice(0, 7);
+      const startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
+      const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 1);
+      
+      // Get subscriptions for this month
+      const { data: subscriptions, error } = await supabase
+        .from('subscriptions')
+        .select('amount, commission_amount')
+        .eq('seller_id', sellerId)
+        .eq('payment_status', 'completed')
+        .gte('valid_from', startDate.toISOString())
+        .lt('valid_from', endDate.toISOString());
+      
+      if (error) {
+        console.warn(`Error fetching data for ${monthKey}:`, error);
+        monthlyBreakdown.push({
+          month: monthKey,
+          earnings: 0,
+          transactions: 0
+        });
+        continue;
+      }
+      
+      const earnings = subscriptions?.reduce((sum, sub) => 
+        sum + (parseFloat(sub.commission_amount) || 0), 0
+      ) || 0;
+      
+      monthlyBreakdown.push({
+        month: monthKey,
+        earnings: Math.round(earnings),
+        transactions: subscriptions?.length || 0
+      });
+    }
+    
+    return monthlyBreakdown.reverse(); // Return in chronological order
     
   } catch (error) {
     console.error('Error getting earnings summary:', error);
@@ -311,74 +251,93 @@ export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
 }
 
 /**
- * Get subscription plan distribution for chart
+ * Get subscription distribution by plan type - Updated for new schema
  * @param {string} sellerId - UUID of the seller
  * @param {string} month - Month in format 'YYYY-MM'
- * @returns {Object} Chart data object
+ * @returns {Object} Distribution data
  */
 export async function getSubscriptionDistribution(sellerId, month = null) {
   try {
-    const earningsData = await getSellerEarnings(sellerId, month);
-    const subscriptions = earningsData.subscriptions;
+    if (!sellerId) {
+      throw new Error('Seller ID is required');
+    }
     
-    if (!subscriptions || subscriptions.length === 0) {
-      return {
-        labels: [],
-        data: [],
-        total: 0
-      };
+    const targetMonth = month || new Date().toISOString().slice(0, 7);
+    const [year, monthNum] = targetMonth.split('-').map(Number);
+    const startDate = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0));
+    
+    // Get subscriptions grouped by plan type
+    const { data: subscriptions, error } = await supabase
+      .from('subscriptions')
+      .select('plan_type, amount, commission_amount')
+      .eq('seller_id', sellerId)
+      .eq('payment_status', 'completed')
+      .gte('valid_from', startDate.toISOString())
+      .lt('valid_from', endDate.toISOString());
+    
+    if (error) {
+      throw error;
     }
     
     // Group by plan type
-    const planStats = {};
-    subscriptions.forEach(sub => {
-      const planType = sub.plan_type || sub.plan_name || 'unknown';
-      const normalizedPlan = planType.toLowerCase().replace(/[_\s]+/g, '_');
-      planStats[normalizedPlan] = (planStats[normalizedPlan] || 0) + 1;
+    const distribution = {};
+    subscriptions?.forEach(sub => {
+      const planType = sub.plan_type || 'unknown';
+      if (!distribution[planType]) {
+        distribution[planType] = {
+          count: 0,
+          totalAmount: 0,
+          totalCommission: 0
+        };
+      }
+      distribution[planType].count++;
+      distribution[planType].totalAmount += parseFloat(sub.amount) || 0;
+      distribution[planType].totalCommission += parseFloat(sub.commission_amount) || 0;
     });
     
-    const total = Object.values(planStats).reduce((sum, count) => sum + count, 0);
+    // Convert to array format for charts
+    const chartData = Object.entries(distribution).map(([planType, data]) => ({
+      planType: planType.charAt(0).toUpperCase() + planType.slice(1),
+      count: data.count,
+      totalAmount: Math.round(data.totalAmount),
+      totalCommission: Math.round(data.totalCommission)
+    }));
     
     return {
-      labels: Object.keys(planStats).map(key => 
-        key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ')
-      ),
-      data: Object.values(planStats),
-      percentages: Object.values(planStats).map(value => 
-        ((value / total) * 100).toFixed(1)
-      ),
-      total
+      distribution,
+      chartData
     };
     
   } catch (error) {
     console.error('Error getting subscription distribution:', error);
-    return {
-      labels: [],
-      data: [],
-      total: 0
-    };
+    throw error;
   }
 }
 
+// Event handlers for reactive updates
 async function handleMonthChange() {
-    console.log('Month changed to:', selectedMonthValue);
-    await earningsActions.updateMonth(selectedMonthValue);
-    await loadChartData();
+  // This would be called when the month selector changes
+  // Implementation depends on your UI framework
 }
 
 async function loadChartData() {
-    console.log('Loading chart data for:', selectedMonthValue);
-    // ...rest of your code
+  // This would load chart data for visualizations
+  // Implementation depends on your charting library
 }
 
 function generateMonthOptions() {
-    const options = [];
-    const now = new Date();
-    for (let i = 11; i >= 0; i--) {
-        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const value = date.toISOString().slice(0, 7);
-        const label = date.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-        options.push({ value, label });
-    }
-    return options;
+  // Generate month options for the date picker
+  const months = [];
+  const currentDate = new Date();
+  
+  for (let i = 0; i < 12; i++) {
+    const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    months.push({
+      value: date.toISOString().slice(0, 7),
+      label: date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
+    });
+  }
+  
+  return months;
 }

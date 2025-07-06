@@ -10,11 +10,11 @@ export const error = writable(null)
 
 // Derived stores
 export const activeSellers = derived(sellers, ($sellers) => 
-  $sellers.filter(seller => seller.is_active)
+  $sellers.filter(seller => seller.is_approved)
 )
 
 export const inactiveSellers = derived(sellers, ($sellers) => 
-  $sellers.filter(seller => !seller.is_active)
+  $sellers.filter(seller => !seller.is_approved)
 )
 
 // Seller management functions
@@ -26,7 +26,6 @@ export const sellerStore = {
     
     try {
       const result = await authStore.getCurrentUserProfile()
-      // console.log(result);
       if (result.success && result.userType === 'seller') {
         currentSeller.set(result.profile)
         return { success: true, profile: result.profile }
@@ -120,8 +119,7 @@ export const sellerStore = {
     error.set(null)
     
     try {
-
-      const result = await authStore.updateSellerProfile (sellerId, updateData)
+      const result = await authStore.updateSellerProfile(sellerId, updateData)
       
       if (result.success) {
         // Refresh the sellers list if we're on admin dashboard
@@ -140,12 +138,12 @@ export const sellerStore = {
   },
 
   // Approve/Reject seller
-  approveSeller: async (sellerId, approved, adminId) => {
+  approveSeller: async (sellerId, approved) => {
     loading.set(true)
     error.set(null)
     
     try {
-      const result = await authStore.approveSeller(sellerId, approved, adminId)
+      const result = await authStore.approveSeller(sellerId, approved)
       
       if (result.success) {
         // Refresh the sellers list
@@ -204,8 +202,3 @@ export const sellerStore = {
   }
 }
 
-// Initialize seller data when store is imported
-export const initializeSellerStore = async () => {
-  // This can be called when the app starts to preload seller data
-  // For now, we'll leave it empty and let components call specific functions
-} 

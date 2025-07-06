@@ -13,7 +13,6 @@
     // Form data
     let formData = {
         name: '',
-        address: '',
         latitude: '',
         longitude: '',
         maxDevices: 100,
@@ -40,8 +39,8 @@
             formErrors.name = 'Master name is required';
         }
         
-        if (!formData.address.trim()) {
-            formErrors.address = 'Address is required';
+        if (!formData.latitude || !formData.longitude) {
+            formErrors.coordinates = 'Both latitude and longitude are required';
         }
         
         if (formData.latitude && (formData.latitude < -90 || formData.latitude > 90)) {
@@ -75,32 +74,19 @@
         successMessage = null;
         
         try {
-            // First, get the admin who will manage this gateway
-            const { data: adminProfiles, error: adminError } = await supabase
-                .from('seller_profiles')
-                .select('created_by')
-                
-            
-            if (adminError || !adminProfiles || adminProfiles.length === 0) {
-                throw new Error('No admin found to manage the gateway');
-            }
-            
-            const adminId = adminProfiles[0].id;
-            
-            // Create the gateway
+            // Create the gateway with the new schema
             const { data: gateway, error: gatewayError } = await supabase
                 .from('gateways')
                 .insert([
                     {
                         name: formData.name.trim(),
-                        address: formData.address.trim(),
-                        latitude: formData.latitude || null,
-                        longitude: formData.longitude || null,
+                        latitude: parseFloat(formData.latitude),
+                        longitude: parseFloat(formData.longitude),
                         max_devices: formData.maxDevices,
                         coverage_radius: formData.coverageRadius,
-                        owned_by: sellerProfile.id,
-                        managed_by: "95656152-4385-4e73-a486-3ee6546ac21a",
-                        status: 'active'
+                        seller_id: sellerProfile.id,
+                        status: 'active',
+                        current_device_count: 0
                     }
                 ])
                 .select()
@@ -115,7 +101,6 @@
             // Reset form
             formData = {
                 name: '',
-                address: '',
                 latitude: '',
                 longitude: '',
                 maxDevices: 100,
@@ -136,7 +121,7 @@
     }
     
     function handleCancel() {
-        goto('/seller/dashboard');
+        goto('/seller/portal/dashboard');
     }
     
     function getCurrentLocation() {
@@ -203,25 +188,9 @@
                     {/if}
                 </div>
 
-                <!-- Address -->
-                <div class="form-group full-width">
-                    <label for="address">Address *</label>
-                    <textarea
-                        id="address"
-                        bind:value={formData.address}
-                        placeholder="Complete address where the master gateway will be installed"
-                        class:error={formErrors.address}
-                        disabled={isLoading}
-                        rows="3"
-                    ></textarea>
-                    {#if formErrors.address}
-                        <span class="field-error">{formErrors.address}</span>
-                    {/if}
-                </div>
-
-                <!-- Location Section -->
+                <!-- Coordinates Section -->
                 <div class="form-group">
-                    <label for="latitude">Latitude</label>
+                    <label for="latitude">Latitude *</label>
                     <input
                         id="latitude"
                         type="number"
@@ -237,7 +206,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="longitude">Longitude</label>
+                    <label for="longitude">Longitude *</label>
                     <input
                         id="longitude"
                         type="number"
@@ -262,6 +231,9 @@
                     >
                         📍 Get Current Location
                     </button>
+                    {#if formErrors.coordinates}
+                        <span class="field-error">{formErrors.coordinates}</span>
+                    {/if}
                 </div>
 
                 <!-- Configuration -->

@@ -60,7 +60,7 @@ async function getCurrentUser() {
     return user;
 }
 
-// Function to load masters and devices data
+// Function to load masters and devices data - Updated for new schema
 export async function loadMastersData(sellerId = null) {
     loading.update(state => ({ ...state, masters: true }));
     error.update(state => ({ ...state, masters: null }));
@@ -73,84 +73,93 @@ export async function loadMastersData(sellerId = null) {
                 id,
                 name,
                 status,
-                address,
                 latitude,
                 longitude,
-                coverage_radius,
                 max_devices,
                 current_device_count,
-                created_at,
-                devices!devices_gateway_id_fkey (
-                    id,
-                    device_id,
-                    device_name,
-                    device_type,
-                    motor_status,
-                    error_status,
-                    installation_date,
-                    warranty_until,
-                    last_updated,
-                    latitude,
-                    longitude,
-                    address,
-                    user_id
-                )
+                created_at
             `);
         
 
         // If sellerId is provided, filter by seller's gateways
         if (sellerId) {
-            gatewayQuery = gatewayQuery.eq('owned_by', sellerId);
+            gatewayQuery = gatewayQuery.eq('seller_id', sellerId);
         }
 
         const { data: gatewaysData, error: gatewaysError } = await gatewayQuery;
-        // console.log(gatewaysData)
         if (gatewaysError) {
             throw gatewaysError;
         }
 
-        // Get all user IDs from devices to fetch their subscriptions
-        const allUserIds = new Set();
-        gatewaysData.forEach(gateway => {
-            gateway.devices.forEach(device => {
-                if (device.user_id) {
-                    allUserIds.add(device.user_id);
+        // Get devices for each gateway separately since there's no foreign key constraint
+        const gatewaysWithDevices = await Promise.all(
+            gatewaysData.map(async (gateway) => {
+                const { data: devices, error: devicesError } = await supabase
+                    .from('devices')
+                    .select(`
+                        id,
+                        device_id,
+                        device_name,
+                        device_type,
+                        motor_status,
+                        error_status,
+                        installation_date,
+                        warranty_until,
+                        customer_name,
+                        customer_phone,
+                        customer_email
+                    `)
+                    .eq('gateway_id', gateway.id);
+                
+                if (devicesError) {
+                    console.warn(`Error fetching devices for gateway ${gateway.id}:`, devicesError);
+                    return { ...gateway, devices: [] };
                 }
+                
+                return { ...gateway, devices: devices || [] };
+            })
+        );
+
+        // Get all device IDs to fetch their subscriptions
+        const allDeviceIds = new Set();
+        gatewaysWithDevices.forEach(gateway => {
+            gateway.devices.forEach(device => {
+                allDeviceIds.add(device.id);
             });
         });
-        // console.log(allUserIds)
 
-        // Fetch subscriptions for all users
+        // Fetch subscriptions for all devices
         let subscriptionsData = [];
-        if (allUserIds.size > 0) {
+        if (allDeviceIds.size > 0) {
             const { data: subs, error: subsError } = await supabase
                 .from('subscriptions')
                 .select('*')
-                .in('user_id', Array.from(allUserIds));
+                .in('device_id', Array.from(allDeviceIds));
                 
-            // console.log(subs)
             if (subsError) {
                 console.warn('Error fetching subscriptions:', subsError);
             } else {
-                subscriptionsData = subs ;
+                subscriptionsData = subs;
             }
         }
 
-        // Create a map of user subscriptions for quick lookup
-        const userSubscriptions = {};
+        // Create a map of device subscriptions for quick lookup
+        const deviceSubscriptions = {};
         subscriptionsData.forEach(sub => {
-            if (!userSubscriptions[sub.user_id]) {
-                userSubscriptions[sub.user_id] = [];
+            if (!deviceSubscriptions[sub.device_id]) {
+                deviceSubscriptions[sub.device_id] = [];
             }
-            userSubscriptions[sub.user_id].push(sub);
+            deviceSubscriptions[sub.device_id].push(sub);
         });
 
         // Transform the data to match the expected format
-        const transformedMasters = gatewaysData.map(gateway => ({
+        const transformedMasters = gatewaysWithDevices.map(gateway => ({
             id: gateway.name || `Gateway-${gateway.id.slice(0, 8)}`,
-            location: gateway.address || 'Location not set',
+            location: gateway.latitude && gateway.longitude 
+                ? `${gateway.latitude.toFixed(6)}, ${gateway.longitude.toFixed(6)}`
+                : 'Coordinates not set',
             status: gateway.status === 'active' ? 'online' : 'offline',
-            range: `${(gateway.coverage_radius / 1000).toFixed(1)}km radius`,
+            range: `${gateway.max_devices} devices max`,
             installed: new Date(gateway.created_at).toLocaleDateString('en-GB', {
                 day: 'numeric',
                 month: 'short',
@@ -159,8 +168,8 @@ export async function loadMastersData(sellerId = null) {
             maxDevices: gateway.max_devices,
             currentDeviceCount: gateway.current_device_count,
             nodes: gateway.devices.map(device => {
-                // Get user's subscriptions
-                const deviceSubscriptions = userSubscriptions[device.user_id] || [];
+                // Get device's subscriptions
+                const deviceSubscriptions = deviceSubscriptions[device.id] || [];
                 const latestSubscription = deviceSubscriptions
                     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
@@ -168,9 +177,9 @@ export async function loadMastersData(sellerId = null) {
                     id: device.device_id,
                     name: device.device_name || device.device_id,
                     status: device.motor_status === 1 ? 'online' : 'offline',
-                    lastActive: getTimeAgo(device.last_updated),
+                    lastActive: getTimeAgo(device.updated_at),
                     rechargeDate: latestSubscription 
-                        ? new Date(latestSubscription.recharge_date).toLocaleDateString('en-GB')
+                        ? new Date(latestSubscription.valid_from).toLocaleDateString('en-GB')
                         : 'Not recharged',
                     expiryDate: latestSubscription 
                         ? new Date(latestSubscription.valid_until).toLocaleDateString('en-GB')
@@ -180,6 +189,9 @@ export async function loadMastersData(sellerId = null) {
                         : 'Not set',
                     deviceType: device.device_type,
                     hasError: device.error_status !== 0,
+                    customerName: device.customer_name || 'Unknown',
+                    customerPhone: device.customer_phone || 'N/A',
+                    customerEmail: device.customer_email || 'N/A',
                     subscription: latestSubscription
                 };
             })
@@ -197,81 +209,76 @@ export async function loadMastersData(sellerId = null) {
     }
 }
 
-// Function to load dashboard statistics
+// Function to load dashboard statistics - Updated for new schema
 export async function loadDashboardStats(sellerId = null) {
     loading.update(state => ({ ...state, stats: true }));
     error.update(state => ({ ...state, stats: null }));
 
     try {
+        // Get gateways count
         let gatewayQuery = supabase
             .from('gateways')
-            .select('id, current_device_count, status');
+            .select('*', { count: 'exact', head: true });
+            
+        if (sellerId) {
+            gatewayQuery = gatewayQuery.eq('seller_id', sellerId);
+        }
+        
+        const { count: totalMasters, error: gatewayError } = await gatewayQuery;
+        if (gatewayError) throw gatewayError;
 
+        // Get devices count
         let deviceQuery = supabase
             .from('devices')
-            .select('id, motor_status, gateway_id');
-
-        // If sellerId is provided, filter by seller's data
+            .select('*', { count: 'exact', head: true });
+            
         if (sellerId) {
-            gatewayQuery = gatewayQuery.eq('owned_by', sellerId);
-            
-            // Get seller's gateway IDs first
-            const { data: sellerGateways } = await supabase
-                .from('gateways')
-                .select('id')
-                .eq('owned_by', sellerId);
-            
-            if (sellerGateways && sellerGateways.length > 0) {
-                const gatewayIds = sellerGateways.map(g => g.id);
-                deviceQuery = deviceQuery.in('gateway_id', gatewayIds);
-            }
+            deviceQuery = deviceQuery.eq('seller_id', sellerId);
         }
+        
+        const { count: totalDevices, error: deviceError } = await deviceQuery;
+        if (deviceError) throw deviceError;
 
-        const [gatewaysResult, devicesResult] = await Promise.all([
-            gatewayQuery,
-            deviceQuery
-        ]);
+        // Get online devices count
+        let onlineDeviceQuery = supabase
+            .from('devices')
+            .select('*', { count: 'exact', head: true })
+            .eq('motor_status', 1);
+            
+        if (sellerId) {
+            onlineDeviceQuery = onlineDeviceQuery.eq('seller_id', sellerId);
+        }
+        
+        const { count: onlineDevices, error: onlineError } = await onlineDeviceQuery;
+        if (onlineError) throw onlineError;
 
-        if (gatewaysResult.error) throw gatewaysResult.error;
-        if (devicesResult.error) throw devicesResult.error;
-
-        const gateways = gatewaysResult.data || [];
-        const devices = devicesResult.data || [];
-
-        // Calculate statistics
-        const totalMasters = gateways.length;
-        const totalDevices = devices.length;
-        const onlineDevices = devices.filter(device => device.motor_status === 1).length;
-
-        // Get recharge statistics for this month
-        const currentMonth = new Date();
-        const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        // Get recharged devices this month
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
         
         let rechargeQuery = supabase
             .from('subscriptions')
-            .select('user_id')
-            .eq('payment_status', 'completed')
-            .gte('recharge_date', startOfMonth.toISOString());
-
+            .select('device_id', { count: 'exact', head: true })
+            .gte('valid_from', startOfMonth.toISOString())
+            .eq('payment_status', 'completed');
+            
         if (sellerId) {
-            rechargeQuery = rechargeQuery.eq('sold_by', sellerId);
+            rechargeQuery = rechargeQuery.eq('seller_id', sellerId);
         }
-
-        const { data: rechargesThisMonth, error: rechargeError } = await rechargeQuery;
         
+        const { count: rechargedThisMonth, error: rechargeError } = await rechargeQuery;
         if (rechargeError) throw rechargeError;
 
-        const rechargedThisMonth = rechargesThisMonth ? rechargesThisMonth.length : 0;
+        const newStats = {
+            totalMasters: totalMasters || 0,
+            totalDevices: totalDevices || 0,
+            onlineDevices: onlineDevices || 0,
+            rechargedThisMonth: rechargedThisMonth || 0
+        };
 
-        // Update the stats store
-        rawStats.set({
-            totalMasters,
-            totalDevices,
-            onlineDevices,
-            rechargedThisMonth
-        });
-
-        return { success: true };
+        rawStats.set(newStats);
+        return { success: true, data: newStats };
 
     } catch (err) {
         console.error('Error loading dashboard stats:', err);
@@ -282,66 +289,57 @@ export async function loadDashboardStats(sellerId = null) {
     }
 }
 
-// Function to load earnings data for sellers
+// Function to load earnings data - Updated for new schema
 export async function loadEarningsData(sellerId) {
-    if (!sellerId) return { success: false, error: 'Seller ID required' };
+    if (!sellerId) {
+        console.error('Seller ID is required for earnings data');
+        return { success: false, error: 'Seller ID is required' };
+    }
 
     loading.update(state => ({ ...state, earnings: true }));
     error.update(state => ({ ...state, earnings: null }));
 
     try {
-        const currentMonth = new Date();
-        const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-
-        // Get subscriptions sold by this seller
-        const { data: subscriptions, error: subscriptionsError } = await supabase
+        // Get current month's subscriptions
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        
+        const { data: subscriptions, error: subError } = await supabase
             .from('subscriptions')
-            .select('*')
-            .eq('sold_by', sellerId)
-            .eq('payment_status', 'completed');
+            .select('amount, commission_amount')
+            .eq('seller_id', sellerId)
+            .eq('payment_status', 'completed')
+            .gte('valid_from', startOfMonth.toISOString());
+            
+        if (subError) throw subError;
 
-        if (subscriptionsError) throw subscriptionsError;
+        // Calculate earnings
+        const thisMonth = subscriptions?.reduce((sum, sub) => 
+            sum + (parseFloat(sub.commission_amount) || 0), 0
+        ) || 0;
+        
+        const devicesRecharged = subscriptions?.length || 0;
+        const totalRechargeAmount = subscriptions?.reduce((sum, sub) => 
+            sum + (parseFloat(sub.amount) || 0), 0
+        ) || 0;
 
-        // Calculate earnings metrics
-        const thisMonthSubs = subscriptions.filter(sub => 
-            new Date(sub.recharge_date) >= startOfMonth
-        );
-        // console.log(thisMonthSubs)
-        const thisMonthEarnings = thisMonthSubs.reduce((sum, sub) => 
-            sum + (sub.commission_amount || 0), 0
-        );
+        // Get seller's commission rate and total sales
+        const { data: sellerProfile } = await supabase
+            .from('seller_profiles')
+            .select('commission_rate, total_sales')
+            .eq('id', sellerId)
+            .single();
 
-        const totalEarnings = subscriptions.reduce((sum, sub) => 
-            sum + (sub.commission_amount || 0), 0
-        );
-
-        const totalRechargeAmount = thisMonthSubs.reduce((sum, sub) => 
-            sum + sub.amount, 0
-        );
-
-        // Get unique devices recharged this month
-        const uniqueDevicesRecharged = new Set(thisMonthSubs.map(sub => sub.id)).size;
-
-        // Get total devices for recharge rate calculation
-        const { data: sellerGateways } = await supabase
-            .from('gateways')
-            .select('current_device_count')
-            .eq('owned_by', sellerId);
-
-        const totalDevicesUnderSeller = sellerGateways
-            ? sellerGateways.reduce((sum, gateway) => sum + gateway.current_device_count, 0)
-            : 0;
-
-        const rechargeRate = totalDevicesUnderSeller > 0 
-            ? Math.floor((uniqueDevicesRecharged / totalDevicesUnderSeller) * 100)
-            : 0;
+        const commissionRate = parseFloat(sellerProfile?.commission_rate) || 10;
+        const rechargeRate = devicesRecharged > 0 ? 100 : 0;
 
         const earningsData = {
-            thisMonth: Math.round(thisMonthEarnings),
-            devicesRecharged: uniqueDevicesRecharged,
+            thisMonth: Math.round(thisMonth),
+            devicesRecharged,
             totalRechargeAmount: Math.round(totalRechargeAmount),
             rechargeRate,
-            totalEarnings: Math.round(totalEarnings)
+            totalEarnings: parseFloat(sellerProfile?.total_sales) || 0
         };
 
         earnings.set(earningsData);
@@ -356,30 +354,29 @@ export async function loadEarningsData(sellerId) {
     }
 }
 
-// Function to load user profile data
+// Function to load user profile
 export async function loadUserProfile() {
     try {
         const currentUser = await getCurrentUser();
-        if (!currentUser) return { success: false, error: 'No authenticated user' };
+        if (!currentUser) {
+            throw new Error('No authenticated user');
+        }
 
-        const { data: profile, error: profileError } = await supabase
+        const { data: profile, error } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', currentUser.id)
             .single();
 
-        if (profileError) throw profileError;
+        if (error) throw error;
 
-        // Update user store
-        user.set({
-            name: profile.full_name || profile.email.split('@')[0],
-            initials: getInitials(profile.full_name || profile.email),
-            notifications: 0, // You can implement notification counting separately
-            email: profile.email,
-            role: profile.role
-        });
+        user.update(state => ({
+            ...state,
+            name: profile.full_name,
+            initials: getInitials(profile.full_name)
+        }));
 
-        return { success: true, data: profile };
+        return { success: true, profile };
 
     } catch (err) {
         console.error('Error loading user profile:', err);
@@ -387,64 +384,64 @@ export async function loadUserProfile() {
     }
 }
 
-// Helper function to get initials from name
+// Utility functions
 function getInitials(name) {
-    if (!name) return 'U';
-    return name
-        .split(' ')
+    if (!name) return '';
+    return name.split(' ')
         .map(word => word.charAt(0))
         .join('')
         .toUpperCase()
         .slice(0, 2);
 }
 
-// Helper function to get time ago string
 function getTimeAgo(dateString) {
     if (!dateString) return 'Never';
     
     const now = new Date();
-    const past = new Date(dateString);
-    const diffMs = now - past;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    const date = new Date(dateString);
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+    
+    return date.toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric'
+    });
 }
 
-// Function to initialize dashboard data
+// Initialize dashboard
 export async function initializeDashboard(sellerId = null) {
     try {
-        // Load user profile first
-        await loadUserProfile();
-        
-        // Load dashboard data
-        const [mastersResult, statsResult] = await Promise.all([
+        await Promise.all([
             loadMastersData(sellerId),
-            loadDashboardStats(sellerId)
+            loadDashboardStats(sellerId),
+            sellerId ? loadEarningsData(sellerId) : Promise.resolve(),
+            loadUserProfile()
         ]);
-
-        // Load earnings data if seller
-        if (sellerId) {
-            await loadEarningsData(sellerId);
-        }
-
-        return {
-            success: mastersResult.success && statsResult.success,
-            masters: mastersResult,
-            stats: statsResult
-        };
-
+        
+        return { success: true };
     } catch (err) {
         console.error('Error initializing dashboard:', err);
         return { success: false, error: err.message };
     }
 }
 
-// Function to refresh all dashboard data
+// Refresh dashboard data
 export async function refreshDashboard(sellerId = null) {
-    return await initializeDashboard(sellerId);
+    try {
+        await Promise.all([
+            loadMastersData(sellerId),
+            loadDashboardStats(sellerId),
+            sellerId ? loadEarningsData(sellerId) : Promise.resolve()
+        ]);
+        
+        return { success: true };
+    } catch (err) {
+        console.error('Error refreshing dashboard:', err);
+        return { success: false, error: err.message };
+    }
 }

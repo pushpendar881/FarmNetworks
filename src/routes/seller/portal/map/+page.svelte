@@ -35,20 +35,19 @@
   
     $: filteredDevices = devices.filter(device => {
       if (deviceStatusFilter === 'all') return true;
-      // Assuming motor_status > 0 means online, 0 means offline
-      const isOnline = device.motor_status > 0;
+      // motor_status 1 means online, 0 means offline
+      const isOnline = device.motor_status === 1;
       return deviceStatusFilter === 'online' ? isOnline : !isOnline;
     });
   
-    // Fetch data from Supabase
+    // Fetch data from Supabase - Updated for new schema
     async function fetchGateways() {
       try {
         const { data, error: fetchError } = await supabase
           .from('gateways')
           .select(`
             *,
-            owned_by_profile:seller_profiles!gateways_owned_by_fkey(business_name),
-            managed_by_profile:admin_profiles!gateways_managed_by_fkey(*)
+            seller_profile:seller_profiles!gateways_seller_id_fkey(business_name)
           `);
   
         if (fetchError) throw fetchError;
@@ -69,16 +68,15 @@
           .from('devices')
           .select(`
             *,
-            user_profile:user_profiles(full_name, email),
             gateway:gateways(name, status),
-            seller_profile:seller_profiles(business_name)
+            seller_profile:seller_profiles!devices_seller_id_fkey(business_name)
           `);
   
         if (fetchError) throw fetchError;
         
         devices = data || [];
         stats.totalDevices = devices.length;
-        stats.onlineDevices = devices.filter(d => d.motor_status > 0).length;
+        stats.onlineDevices = devices.filter(d => d.motor_status === 1).length;
         
       } catch (err) {
         console.error('Error fetching devices:', err);
@@ -175,8 +173,8 @@
                   <h4>${gateway.name}</h4>
                   <p><strong>Status:</strong> ${gateway.status}</p>
                   <p><strong>Devices:</strong> ${gateway.current_device_count}/${gateway.max_devices}</p>
-                  <p><strong>Address:</strong> ${gateway.address || 'Not specified'}</p>
-                  ${gateway.owned_by_profile ? `<p><strong>Owner:</strong> ${gateway.owned_by_profile.business_name}</p>` : ''}
+                  <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+                  ${gateway.seller_profile ? `<p><strong>Seller:</strong> ${gateway.seller_profile.business_name}</p>` : ''}
                 </div>
               `)
               .addTo(map);
@@ -208,7 +206,7 @@
           if (device.latitude && device.longitude) {
             const lat = parseFloat(device.latitude);
             const lng = parseFloat(device.longitude);
-            const isOnline = device.motor_status > 0;
+            const isOnline = device.motor_status === 1;
             
             const deviceIcon = L.divIcon({
               className: 'device-marker',
@@ -222,10 +220,10 @@
                 <div class="popup-content">
                   <h4>${device.device_name || device.device_id}</h4>
                   <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
-                  <p><strong>User:</strong> ${device.user_profile?.full_name || 'Unknown'}</p>
+                  <p><strong>Customer:</strong> ${device.customer_name || 'Unknown'}</p>
                   <p><strong>Gateway:</strong> ${device.gateway?.name || 'Unknown'}</p>
-                  <p><strong>Last Updated:</strong> ${new Date(device.last_updated).toLocaleString()}</p>
-                  ${device.address ? `<p><strong>Address:</strong> ${device.address}</p>` : ''}
+                  <p><strong>Last Updated:</strong> ${new Date(device.updated_at).toLocaleString()}</p>
+                  ${device.customer_phone ? `<p><strong>Phone:</strong> ${device.customer_phone}</p>` : ''}
                 </div>
               `)
               .addTo(map);
@@ -240,8 +238,7 @@
           .from('devices')
           .select(`
             *,
-            user_profile:user_profiles(full_name, email),
-            seller_profile:seller_profiles(business_name)
+            seller_profile:seller_profiles!devices_seller_id_fkey(business_name)
           `)
           .eq('gateway_id', gatewayId);
   
@@ -460,8 +457,8 @@
                 <span class="status-badge {selectedGateway.status}">{selectedGateway.status}</span>
               </div>
               <div class="info-row">
-                <span>Address:</span>
-                <span>{selectedGateway.address || 'Not specified'}</span>
+                <span>Coordinates:</span>
+                <span>{selectedGateway.latitude ? `${selectedGateway.latitude.toFixed(6)}, ${selectedGateway.longitude.toFixed(6)}` : 'Not specified'}</span>
               </div>
               <div class="info-row">
                 <span>Coverage:</span>
@@ -474,13 +471,13 @@
             </div>
           </div>
   
-          {#if selectedGateway.owned_by_profile}
+          {#if selectedGateway.seller_profile}
             <div class="info-card">
-              <h4>Owner Information</h4>
+              <h4>Seller Information</h4>
               <div class="info-details">
                 <div class="info-row">
                   <span>Business:</span>
-                  <span>{selectedGateway.owned_by_profile.business_name}</span>
+                  <span>{selectedGateway.seller_profile.business_name}</span>
                 </div>
               </div>
             </div>
@@ -496,23 +493,29 @@
                 <div class="device-card">
                   <div class="device-header">
                     <span class="device-name">{device.device_name || device.device_id}</span>
-                    <span class="device-status {device.motor_status > 0 ? 'online' : 'offline'}">
-                      {device.motor_status > 0 ? 'Online' : 'Offline'}
+                    <span class="device-status {device.motor_status === 1 ? 'online' : 'offline'}">
+                      {device.motor_status === 1 ? 'Online' : 'Offline'}
                     </span>
                   </div>
                   <div class="device-details">
                     <div class="detail-row">
-                      <span>User:</span>
-                      <span>{device.user_profile?.full_name || 'Unknown'}</span>
+                      <span>Customer:</span>
+                      <span>{device.customer_name || 'Unknown'}</span>
                     </div>
                     <div class="detail-row">
                       <span>Last Updated:</span>
-                      <span>{new Date(device.last_updated).toLocaleString()}</span>
+                      <span>{new Date(device.updated_at).toLocaleString()}</span>
                     </div>
-                    {#if device.address}
+                    {#if device.customer_phone}
                       <div class="detail-row">
-                        <span>Address:</span>
-                        <span>{device.address}</span>
+                        <span>Phone:</span>
+                        <span>{device.customer_phone}</span>
+                      </div>
+                    {/if}
+                    {#if device.customer_email}
+                      <div class="detail-row">
+                        <span>Email:</span>
+                        <span>{device.customer_email}</span>
                       </div>
                     {/if}
                   </div>
