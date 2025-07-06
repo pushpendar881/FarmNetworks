@@ -66,26 +66,29 @@ export const earningsActions = {
     currentSellerId.set(sellerId);
     isLoading.set(true);
     error.set(null);
-
-    try {
-      // Use the current selected month
-      const month = get(selectedMonth);
-      const earningsData = await getSellerEarnings(sellerId, month);
-      earnings.set({ ...earningsData });
-    } catch (err) {
-      error.set(`Failed to load earnings data: ${err.message}`);
-      earnings.set({
-        thisMonth: 0,
-        devicesRecharged: 0,
-        totalRechargeAmount: 0,
-        rechargeRate: 0,
-        commissionRate: 5,
-        recentTransactions: [],
-        sellerRating: 0,
-        totalSales: 0,
-        subscriptions: []
-      });
-    } finally {
+try {
+  const earningsData = await getSellerEarnings(sellerId, month);
+  if (!earningsData) {
+    throw new Error('No earnings data received');
+  }
+  earnings.set({ ...earningsData });
+} catch (err) {
+  console.error('Dashboard error:', err);
+  error.set(`Failed to load earnings: ${err.message}`);
+  // Set default values
+  earnings.set({
+    thisMonth: 0,
+    devicesRecharged: 0,
+    totalRechargeAmount: 0,
+    rechargeRate: 0,
+    commissionRate: 10,
+    recentTransactions: [],
+    sellerRating: 0,
+    totalSales: 0,
+    subscriptions: []
+  });
+  }
+     finally {
       isLoading.set(false);
     }
   },

@@ -76,8 +76,9 @@ export async function getSellerEarnings(sellerId, month = null) {
       .eq('id', sellerId)
       .maybeSingle();
     
-    const commissionRate = parseFloat(sellerData?.commission_rate) || 10;
-    const rechargeRate = devicesRecharged > 0 ? 100 : 0;
+      const calculatedCommission = (parseFloat(sub.amount) * commissionRate) / 100;
+      const commission = parseFloat(sub.commission_amount) || calculatedCommission;
+      const rechargeRate = devicesRecharged > 0 ? 100 : 0;
     
     // Format recent transactions
     const recentTransactions = subscriptions?.slice(0, 10).map(sub => {
@@ -123,11 +124,14 @@ export async function getSellerEarnings(sellerId, month = null) {
  * @param {string} month - Month in format 'YYYY-MM'
  * @returns {string} CSV content
  */
-export async function exportSellerEarnings(sellerId, month = null) {
-  try {
-    if (!sellerId) {
-      throw new Error('Seller ID is required');
-    }
+export async function getSellerEarnings(sellerId, month = null) {
+  if (!sellerId || typeof sellerId !== 'string') {
+    throw new Error('Valid seller ID is required');
+  }
+  
+  if (month && !/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error('Month must be in YYYY-MM format');
+  }
     
     const targetMonth = month || new Date().toISOString().slice(0, 7);
     const [year, monthNum] = targetMonth.split('-').map(Number);
@@ -136,17 +140,17 @@ export async function exportSellerEarnings(sellerId, month = null) {
     
     // Get subscriptions with device details
     const { data: subscriptions, error } = await supabase
-      .from('subscriptions')
-      .select(`
-        *,
-        devices (
-          device_id,
-          device_name,
-          customer_name,
-          customer_phone,
-          customer_email
-        )
-      `)
+    .from('subscriptions')
+    .select(`
+      *,
+      devices!subscriptions_device_id_fkey (
+        device_id,
+        device_name,
+        customer_name,
+        customer_phone,
+        customer_email
+      )
+    `)
       .eq('seller_id', sellerId)
       .eq('payment_status', 'completed')
       .gte('valid_from', startDate.toISOString())
@@ -162,7 +166,8 @@ export async function exportSellerEarnings(sellerId, month = null) {
     }
     
     // Create CSV content
-    const csvHeader = 'Date,Device ID,Device Name,Customer Name,Customer Phone,Customer Email,Plan Name,Amount,Commission,Status\n';
+    // Update CSV header to match your data structure:
+const csvHeader = 'Date,Transaction ID,Device ID,Device Name,Customer Name,Customer Phone,Customer Email,Plan Name,Plan Type,Amount,Commission,Status\n';
     const csvRows = subscriptions.map(sub => {
       const device = sub.devices || {};
       const date = new Date(sub.valid_from).toLocaleDateString('en-IN');
@@ -209,9 +214,8 @@ export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
     for (let i = 0; i < monthsBack; i++) {
       const targetDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthKey = targetDate.toISOString().slice(0, 7);
-      const startDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
-      const endDate = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 1);
-      
+      const startDate = `${year}-${monthNum.toString().padStart(2, '0')}-01T00:00:00Z`;
+      const endDate = `${year}-${(monthNum + 1).toString().padStart(2, '0')}-01T00:00:00Z`;
       // Get subscriptions for this month
       const { data: subscriptions, error } = await supabase
         .from('subscriptions')

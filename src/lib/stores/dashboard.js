@@ -144,14 +144,14 @@ export async function loadMastersData(sellerId = null) {
         }
 
         // Create a map of device subscriptions for quick lookup
-        const deviceSubscriptions = {};
+        const deviceSubscriptionsMap = {};
         subscriptionsData.forEach(sub => {
-            if (!deviceSubscriptions[sub.device_id]) {
-                deviceSubscriptions[sub.device_id] = [];
+            if (!deviceSubscriptionsMap[sub.device_id]) {
+                deviceSubscriptionsMap[sub.device_id] = [];
             }
-            deviceSubscriptions[sub.device_id].push(sub);
+            deviceSubscriptionsMap[sub.device_id].push(sub);
         });
-
+        
         // Transform the data to match the expected format
         const transformedMasters = gatewaysWithDevices.map(gateway => ({
             id: gateway.name || `Gateway-${gateway.id.slice(0, 8)}`,
@@ -168,11 +168,11 @@ export async function loadMastersData(sellerId = null) {
             maxDevices: gateway.max_devices,
             currentDeviceCount: gateway.current_device_count,
             nodes: gateway.devices.map(device => {
-                // Get device's subscriptions
-                const deviceSubscriptions = deviceSubscriptions[device.id] || [];
-                const latestSubscription = deviceSubscriptions
+                // Get device's subscriptions using the renamed map
+                const deviceSubs = deviceSubscriptionsMap[device.id] || [];
+                const latestSubscription = deviceSubs
                     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-
+        
                 return {
                     id: device.device_id,
                     name: device.device_name || device.device_id,
