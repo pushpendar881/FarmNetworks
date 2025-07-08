@@ -181,15 +181,28 @@
   
             // Coverage circle
             if (gateway.coverage_radius) {
-              L.circle([lat, lng], {
-                radius: gateway.coverage_radius,
-                color: gateway.status === 'active' ? '#6366f1' : '#ef4444',
-                fillColor: gateway.status === 'active' ? '#6366f1' : '#ef4444',
-                fillOpacity: 0.1,
-                weight: 2,
-                opacity: 0.6
-              }).addTo(map);
-            }
+  const svgCircle = L.circle([lat, lng], {
+    radius: gateway.coverage_radius,
+    color: 'transparent',
+    fillColor: 'transparent',
+    className: 'animatedCircle'  // this will hook into the CSS animation
+  });
+
+  // Manually style the SVG element
+  svgCircle.on('add', () => {
+    const path = svgCircle.getElement();
+    if (path) {
+      path.setAttribute('stroke', gateway.status === 'active' ? '#a855f7' : '#ef4444');
+      path.setAttribute('fill', gateway.status === 'active' ? '#a855f7' : '#ef4444');
+      path.setAttribute('fill-opacity', '0.4');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('class', 'animatedCircle');
+    }
+  });
+
+  svgCircle.addTo(map);
+}
+  
   
             // Click handler to select gateway
             marker.on('click', () => {
@@ -996,4 +1009,29 @@
         grid-template-columns: 1fr;
       }
     }
+ :global(.animatedCircle) {
+  animation: pulseRing 2s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    stroke-opacity: 0.4;
+    stroke-width: 2;
+  }
+  50% {
+    transform: scale(1.5);
+    stroke-opacity: 0.1;
+    stroke-width: 10;
+  }
+  100% {
+    transform: scale(1);
+    stroke-opacity: 0.4;
+    stroke-width: 2;
+  }
+}
+
+
   </style>

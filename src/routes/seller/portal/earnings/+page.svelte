@@ -1,355 +1,420 @@
-    <script>
-        import Header from '$lib/components/Header.svelte';
-        import { onMount, onDestroy } from 'svelte';
-        import { tick } from 'svelte';
-        import { 
-            earnings, 
-            selectedMonth, 
-            isLoading, 
-            isExporting, 
-            error,
-            earningsActions 
-        } from '$lib/stores/seller/dashboard.js';
-        import { sellerStore } from '$lib/stores/sellerStore.js';
-        import { supabase } from '$lib/supabase.js';
+<script>
+    import Header from '$lib/components/Header.svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import { tick } from 'svelte';
+    import { 
+        earnings, 
+        monthlyBreakdown,
+        selectedMonth, 
+        isLoading, 
+        isExporting, 
+        error,
+        earningsActions 
+    } from '$lib/stores/seller/dashboard.js';
+    import { sellerStore } from '$lib/stores/sellerStore.js';
+    import { supabase } from '$lib/supabase.js';
 
-        // Main state variables
-        let sellerId = null;
-        let selectedMonthValue = new Date().toISOString().slice(0, 7);
-        let monthOptions = [];
-        
-        // Chart variables
-        let subscriptionChart = null;
-        let sub=null;
-        let earningsChart = null;
-        let chartLoading = false;
-        let localChartData = [];
-        let subscriptionChartContainer;
+    // Main state variables
+    let sellerId = null;
+    let selectedMonthValue = new Date().toISOString().slice(0, 7);
+    let monthOptions = [];
+    
+    // Chart variables
+    let subscriptionChart = null;
+    let monthlyBreakdownChart = null;
+    let earningsChart = null;
+    let chartLoading = false;
+    let localChartData = [];
+    let subscriptionChartContainer;
+    let monthlyChartContainer;
 
-        onMount(async () => {
-            await initializeComponent();
-        });
+    onMount(async () => {
+        await initializeComponent();
+    });
 
-        onDestroy(() => {
-            destroyCharts();
-        });
+    onDestroy(() => {
+        destroyCharts();
+    });
 
-        async function initializeComponent() {
-            try {
-                // Load seller data
-                const seller = await sellerStore.loadCurrentSeller();
-                sellerId = seller?.profile?.id;
+    async function initializeComponent() {
+        try {
+            // Load seller data
+            const seller = await sellerStore.loadCurrentSeller();
+            sellerId = seller?.profile?.id;
+            
+            if (sellerId) {
+                // Generate month options first
+                monthOptions = generateMonthOptions();
                 
-                if (sellerId) {
-        // Generate month options first
-        monthOptions = generateMonthOptions();
-        
-        // Set initial selected month in store
-        selectedMonth.set(selectedMonthValue);
-        
-        // Initialize earnings store
-        await earningsActions.init(sellerId);
-        
-        // Load chart data
-        await loadChartData();
-    }   
-            } catch (err) {
-                console.error('Error initializing component:', err);
-            }
+                // Set initial selected month in store
+                selectedMonth.set(selectedMonthValue);
+                
+                // Initialize earnings store
+                await earningsActions.init(sellerId);
+                
+                // Load chart data
+                await loadChartData();
+                
+                // Load monthly breakdown data
+                await loadMonthlyBreakdown();
+            }   
+        } catch (err) {
+            console.error('Error initializing component:', err);
         }
+    }
 
-        function generateMonthOptions() {
-            const options = [];
+    function generateMonthOptions() {
+        const options = [];
+        const now = new Date();
+        
+        for (let i = 11; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            const label = date.toLocaleDateString('en-IN', { 
+                month: 'long', 
+                year: 'numeric' 
+            });
+            options.push({ value, label });
+        }
+        return options;
+    }
+
+    async function loadChartData() {
+        if (!sellerId) return;
+        try {
+            chartLoading = true;
+            console.log('Selected month value:', selectedMonthValue);
+            
+            const [year, month] = selectedMonthValue.split('-').map(Number);
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 1);
+            
+            console.log('Start date:', startDate.toISOString().split('T')[0], 'End date:', endDate.toISOString().split('T')[0]);
+            
+            const { data: subscriptions, error } = await supabase
+                .from('subscription_details')
+                .select('*')
+                .eq('sold_by', sellerId)
+                .eq('payment_status', 'completed')
+                .gte('recharge_date', startDate.toISOString().split('T')[0])
+                .lt('recharge_date', endDate.toISOString().split('T')[0]);
+            
+            if (error) throw error;
+            
+            console.log('Subscriptions:', subscriptions);
+            processSubscriptionData(subscriptions || []);
+            console.log('localChartData:', localChartData);
+            
+            // Wait for chartLoading to be set to false first
+            chartLoading = false;
+            
+            // Then render charts after a small delay
+            await tick();
+            setTimeout(() => {
+                renderCharts();
+            }, 100);
+            
+        } catch (err) {
+            console.error('Error loading chart data:', err);
+            localChartData = [];
+            chartLoading = false;
+        }
+    }
+
+    async function loadMonthlyBreakdown() {
+        if (!sellerId) return;
+        try {
+            // Load last 6 months of data for breakdown
+            const breakdownData = [];
             const now = new Date();
             
-            for (let i = 11; i >= 0; i--) {
+            for (let i = 5; i >= 0; i--) {
                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                const label = date.toLocaleDateString('en-IN', { 
-                    month: 'long', 
-                    year: 'numeric' 
+                const year = date.getFullYear();
+                const month = date.getMonth() + 1;
+                const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+                
+                const startDate = new Date(year, month - 1, 1);
+                const endDate = new Date(year, month, 1);
+                
+                const { data: monthlyData, error } = await supabase
+                    .from('subscription_details')
+                    .select('*')
+                    .eq('sold_by', sellerId)
+                    .eq('payment_status', 'completed')
+                    .gte('recharge_date', startDate.toISOString().split('T')[0])
+                    .lt('recharge_date', endDate.toISOString().split('T')[0]);
+                
+                if (error) throw error;
+                
+                const monthlyEarnings = monthlyData?.reduce((sum, item) => 
+                    sum + (item.amount * 0.1), 0) || 0; // 10% commission
+                
+                breakdownData.push({
+                    month: date.toLocaleDateString('en-IN', { 
+                        month: 'short', 
+                        year: '2-digit' 
+                    }),
+                    fullMonth: date.toLocaleDateString('en-IN', { 
+                        month: 'long', 
+                        year: 'numeric' 
+                    }),
+                    earnings: monthlyEarnings,
+                    transactions: monthlyData?.length || 0,
+                    totalAmount: monthlyData?.reduce((sum, item) => sum + item.amount, 0) || 0,
+                    successRate: monthlyData?.length > 0 ? 100 : 0 // All completed are 100% success
                 });
-                options.push({ value, label });
             }
-            return options;
+            
+            monthlyBreakdown.set(breakdownData);
+            
+            // Render monthly breakdown chart
+            await tick();
+            setTimeout(() => {
+                renderMonthlyBreakdownChart();
+            }, 200);
+            
+        } catch (err) {
+            console.error('Error loading monthly breakdown:', err);
         }
+    }
 
-        async function loadChartData() {
-    if (!sellerId) return;
-    try {
-        chartLoading = true;
-        console.log('Selected month value:', selectedMonthValue);
+    function processSubscriptionData(subscriptions) {
+        const completedSubs = subscriptions.filter(sub => sub.payment_status === 'completed');
         
-        const [year, month] = selectedMonthValue.split('-').map(Number);
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 1);
+        if (completedSubs.length === 0) {
+            localChartData = [];
+            return;
+        }
         
-        console.log('Start date:', startDate.toISOString().split('T')[0], 'End date:', endDate.toISOString().split('T')[0]);
+        // Process plan type distribution
+        const planTypeStats = {};
+        completedSubs.forEach(sub => {
+            const planType = sub.plan_type || 'unknown';
+            planTypeStats[planType] = (planTypeStats[planType] || 0) + 1;
+        });
         
-        const { data: subscriptions, error } = await supabase
-            .from('subscription_details')
-            .select('*')
-            .eq('sold_by', sellerId)
-            .eq('payment_status', 'completed')
-            .gte('recharge_date', startDate.toISOString().split('T')[0])
-            .lt('recharge_date', endDate.toISOString().split('T')[0]);
+        const total = Object.values(planTypeStats).reduce((sum, count) => sum + count, 0);
         
-        if (error) throw error;
-        
-        console.log('Subscriptions:', subscriptions);
-        processSubscriptionData(subscriptions || []);
-        console.log('localChartData:', localChartData);
-        
-        // Wait for chartLoading to be set to false first
-        chartLoading = false;
-        
-        // Then render charts after a small delay
+        localChartData = Object.entries(planTypeStats).map(([planType, count]) => ({
+            name: planType.charAt(0).toUpperCase() + planType.slice(1).replace('_', ' '),
+            value: count,
+            percentage: ((count / total) * 100).toFixed(1)
+        }));
+    }
+
+    async function renderCharts() {
+        // Wait for DOM to update after localChartData changes
         await tick();
-        setTimeout(() => {
-            renderCharts();
-        }, 100);
         
-    } catch (err) {
-        console.error('Error loading chart data:', err);
-        localChartData = [];
-        chartLoading = false;
-    }
-}
-
-        function processSubscriptionData(subscriptions) {
-            const completedSubs = subscriptions.filter(sub => sub.payment_status === 'completed');
-            
-            if (completedSubs.length === 0) {
-                localChartData = [];
-                return;
-            }
-            
-            // Process plan type distribution
-            const planTypeStats = {};
-            completedSubs.forEach(sub => {
-                const planType = sub.plan_type || 'unknown';
-                planTypeStats[planType] = (planTypeStats[planType] || 0) + 1;
-            });
-            
-            const total = Object.values(planTypeStats).reduce((sum, count) => sum + count, 0);
-            
-            localChartData = Object.entries(planTypeStats).map(([planType, count]) => ({
-                name: planType.charAt(0).toUpperCase() + planType.slice(1).replace('_', ' '),
-                value: count,
-                percentage: ((count / total) * 100).toFixed(1)
-            }));
-        }
-
-        async function renderCharts() {
-    // Wait for DOM to update after localChartData changes
-    await tick();
-    
-    // Additional wait to ensure the conditional block has rendered
-    if (localChartData.length > 0) {
-        // Wait a bit more for the chart container to be available
-        setTimeout(() => {
-            renderSubscriptionChart();
-        }, 50);
-    }
-}
-
-        function renderSubscriptionChart() {
-    const chartElement = subscriptionChartContainer;
-    if (!chartElement) {
-        console.warn('Chart element not found, retrying...');
-        // Retry after a short delay to allow DOM to update
-        setTimeout(() => {
-            if (subscriptionChartContainer) {
+        // Additional wait to ensure the conditional block has rendered
+        if (localChartData.length > 0) {
+            // Wait a bit more for the chart container to be available
+            setTimeout(() => {
                 renderSubscriptionChart();
-            } else {
-                console.error('Chart container still not available after retry');
-            }
-        }, 100);
-        return;
+            }, 50);
+        }
     }
-    
-    if (!window.ApexCharts) {
-        console.error('ApexCharts not loaded');
-        return;
-    }
-    
-    // Destroy existing chart
-    if (subscriptionChart) {
-        subscriptionChart.destroy();
-        subscriptionChart = null;
-    }
-    
-    // Only render if we have data
-    if (localChartData.length === 0) {
-        console.log('No chart data available');
-        return;
-    }
-    
-    // PIE CHART 
-    const chartOptions1 = {
-        series: localChartData.map(d => d.value),
-        colors: ["#1C64F2", "#16BDCA", "#9061F9", "#F05252", "#10B981"],
-        chart: {
-            height: 320,
-            width: "100%",
-            type: "pie",
-            fontFamily: "Inter, sans-serif"
-        },
-        stroke: {
-            colors: ["white"],
-            lineCap: "round"
-        },
-        plotOptions: {
-            pie: {
-                dataLabels: {
-                    offset: -25
+
+    function renderSubscriptionChart() {
+        const chartElement = subscriptionChartContainer;
+        if (!chartElement) {
+            console.warn('Chart element not found, retrying...');
+            setTimeout(() => {
+                if (subscriptionChartContainer) {
+                    renderSubscriptionChart();
+                } else {
+                    console.error('Chart container still not available after retry');
                 }
-            }
-        },
-        labels: localChartData.map(d => d.name),
-        dataLabels: {
-            enabled: true,
-            style: {
+            }, 200);
+            return;
+        }
+        
+        if (!window.ApexCharts) {
+            console.error('ApexCharts not loaded');
+            return;
+        }
+        
+        // Destroy existing chart
+        if (subscriptionChart) {
+            subscriptionChart.destroy();
+            subscriptionChart = null;
+        }
+        
+        // Only render if we have data
+        if (localChartData.length === 0) {
+            console.log('No chart data available');
+            return;
+        }
+        
+        // BAR CHART
+        const chartOptions = {
+            series: [{
+                name: "Subscriptions",
+                data: localChartData.map(d => d.value)
+            }],
+            colors: ["#1C64F2"],
+            chart: {
+                type: "bar",
+                height: 320,
                 fontFamily: "Inter, sans-serif"
             },
-            formatter: function(val, opts) {
-                return localChartData[opts.seriesIndex].percentage + "%";
-            }
-        },
-        legend: {
-            position: "bottom",
-            fontFamily: "Inter, sans-serif",
-            fontSize: "14px"
-        },
-        tooltip: {
-            y: {
-                formatter: function(value) {
-                    return value + " subscriptions";
+            xaxis: {
+                categories: localChartData.map(d => d.name),
+                labels: {
+                    style: {
+                        fontFamily: "Inter, sans-serif"
+                    }
+                }
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function(val, opts) {
+                    return localChartData[opts.dataPointIndex].percentage + "%";
+                },
+                style: {
+                    fontFamily: "Inter, sans-serif"
+                }
+            },
+            legend: {
+                position: "bottom",
+                fontFamily: "Inter, sans-serif",
+                fontSize: "14px"
+            },
+            tooltip: {
+                y: {
+                    formatter: function(value) {
+                        return value + " subscriptions";
+                    }
                 }
             }
+        };
+        
+        try {
+            subscriptionChart = new ApexCharts(chartElement, chartOptions);
+            subscriptionChart.render();
+            console.log('Chart rendered successfully');
+        } catch (error) {
+            console.error('Error rendering subscription chart:', error);
         }
-    };
+    }
 
-    //  BAR CHART
-    const chartOptions = {
-    series: [{
-        name: "Subscriptions",
-        data: localChartData.map(d => d.value)
-    }],
-    colors: ["#1C64F2"],
-    chart: {
-        type: "bar",
-        height: 320,
-        fontFamily: "Inter, sans-serif"
-    },
-    xaxis: {
-        categories: localChartData.map(d => d.name),
-        labels: {
-            style: {
+    function renderMonthlyBreakdownChart() {
+        const chartElement = monthlyChartContainer;
+        if (!chartElement || !$monthlyBreakdown.length) {
+            return;
+        }
+        
+        if (!window.ApexCharts) {
+            console.error('ApexCharts not loaded');
+            return;
+        }
+        
+        // Destroy existing chart
+        if (monthlyBreakdownChart) {
+            monthlyBreakdownChart.destroy();
+            monthlyBreakdownChart = null;
+        }
+        
+        // LINE CHART for monthly earnings
+        const chartOptions = {
+            series: [{
+                name: "Earnings",
+                data: $monthlyBreakdown.map(d => d.earnings)
+            }, {
+                name: "Transactions",
+                data: $monthlyBreakdown.map(d => d.transactions)
+            }],
+            colors: ["#16BDCA", "#1C64F2"],
+            chart: {
+                type: "line",
+                height: 350,
                 fontFamily: "Inter, sans-serif"
+            },
+            xaxis: {
+                categories: $monthlyBreakdown.map(d => d.month),
+                labels: {
+                    style: {
+                        fontFamily: "Inter, sans-serif"
+                    }
+                }
+            },
+            yaxis: [
+                {
+                    title: {
+                        text: 'Earnings (₹)',
+                        style: {
+                            fontFamily: "Inter, sans-serif"
+                        }
+                    },
+                    labels: {
+                        formatter: function(val) {
+                            return '₹' + val.toFixed(0);
+                        }
+                    }
+                },
+                {
+                    opposite: true,
+                    title: {
+                        text: 'Transactions',
+                        style: {
+                            fontFamily: "Inter, sans-serif"
+                        }
+                    }
+                }
+            ],
+            stroke: {
+                curve: "smooth",
+                width: 3
+            },
+            dataLabels: {
+                enabled: false
+            },
+            legend: {
+                position: "top",
+                fontFamily: "Inter, sans-serif",
+                fontSize: "14px"
+            },
+            tooltip: {
+                shared: true,
+                intersect: false,
+                y: [{
+                    formatter: function(value) {
+                        return '₹' + value.toFixed(2);
+                    }
+                }, {
+                    formatter: function(value) {
+                        return value + " transactions";
+                    }
+                }]
             }
-        }
-    },
-    dataLabels: {
-        enabled: true,
-        formatter: function(val, opts) {
-            return localChartData[opts.dataPointIndex].percentage + "%";
-        },
-        style: {
-            fontFamily: "Inter, sans-serif"
-        }
-    },
-    legend: {
-        position: "bottom",
-        fontFamily: "Inter, sans-serif",
-        fontSize: "14px"
-    },
-    tooltip: {
-        y: {
-            formatter: function(value) {
-                return value + " subscriptions";
-            }
+        };
+        
+        try {
+            monthlyBreakdownChart = new ApexCharts(chartElement, chartOptions);
+            monthlyBreakdownChart.render();
+            console.log('Monthly breakdown chart rendered successfully');
+        } catch (error) {
+            console.error('Error rendering monthly breakdown chart:', error);
         }
     }
-};
 
-// LINE CHART 
-// const chartOptions = {
-//     series: [{
-//         name: "Subscriptions",
-//         data: localChartData.map(d => d.value)
-//     }],
-//     colors: ["#16BDCA"],
-//     chart: {
-//         type: "line",
-//         height: 320,
-//         fontFamily: "Inter, sans-serif"
-//     },
-//     xaxis: {
-//         categories: localChartData.map(d => d.name),
-//         labels: {
-//             style: {
-//                 fontFamily: "Inter, sans-serif"
-//             }
-//         }
-//     },
-//     stroke: {
-//         curve: "smooth",
-//         width: 3
-//     },
-//     dataLabels: {
-//         enabled: true,
-//         formatter: function(val, opts) {
-//             return localChartData[opts.dataPointIndex].percentage + "%";
-//         },
-//         style: {
-//             fontFamily: "Inter, sans-serif"
-//         }
-//     },
-//     legend: {
-//         position: "bottom",
-//         fontFamily: "Inter, sans-serif",
-//         fontSize: "14px"
-//     },
-//     tooltip: {
-//         y: {
-//             formatter: function(value) {
-//                 return value + " subscriptions";
-//             }
-//         }
-//     }
-// };
-
-
-    
-    
-    try {
-        subscriptionChart = new ApexCharts(chartElement, chartOptions);
-        // sub=new ApexCharts(chartElement, chartOptions1);
-        subscriptionChart.render();
-        // sub.render();
-        console.log('Chart rendered successfully');
-    } catch (error) {
-        console.error('Error rendering subscription chart:', error);
-    }
-}
-
-        function destroyCharts() {
-            if (subscriptionChart) {
-                subscriptionChart.destroy();
-                subscriptionChart = null;
-            }
-            // if(sub){
-            //     sub.destroy();
-            //     sub  = null;
-            // }
-            if (earningsChart) {
-                earningsChart.destroy();
-                earningsChart = null;
-            }
+    function destroyCharts() {
+        if (subscriptionChart) {
+            subscriptionChart.destroy();
+            subscriptionChart = null;
         }
+        if (monthlyBreakdownChart) {
+            monthlyBreakdownChart.destroy();
+            monthlyBreakdownChart = null;
+        }
+        if (earningsChart) {
+            earningsChart.destroy();
+            earningsChart = null;
+        }
+    }
 
-        async function handleMonthChange() {
+    async function handleMonthChange() {
         console.log('Month changed to:', selectedMonthValue);
         
         // Update the store first
@@ -362,616 +427,565 @@
         await loadChartData();
     }
 
-        async function handleExport() {
-            await earningsActions.exportData();
+    async function handleExport() {
+        await earningsActions.exportData();
+    }
+
+    async function handleRefresh() {
+        if (sellerId) {
+            await earningsActions.init(sellerId);
+            await loadChartData();
+            await loadMonthlyBreakdown();
         }
+    }
 
-        async function handleRefresh() {
-            if (sellerId) {
-                await earningsActions.init(sellerId);
-                await loadChartData();
-            }
-        }
+    // Format currency helper
+    function formatCurrency(amount) {
+        if (!amount) return '₹0.00';
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR'
+        }).format(amount);
+    }
 
-        // Format currency helper
-        function formatCurrency(amount) {
-            if (!amount) return '₹0.00';
-            return new Intl.NumberFormat('en-IN', {
-                style: 'currency',
-                currency: 'INR'
-            }).format(amount);
-        }
+    // Reactive statement to sync with store
+    $: if (localChartData.length > 0 && subscriptionChartContainer && !chartLoading) {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+            renderSubscriptionChart();
+        }, 100);
+    }
 
-        // Reactive statement to sync with store
-        // $: if ($selectedMonth !== selectedMonthValue) {
-        //     selectedMonthValue = $selectedMonth;
-        //     if (sellerId) {
-        //         loadChartData();
-        //     }
-        // }
-        $: if (localChartData.length > 0 && subscriptionChartContainer && !chartLoading) {
-    // Small delay to ensure DOM is ready
-    setTimeout(() => {
-        renderSubscriptionChart();
-    }, 50);
-}
-    </script>
+    $: if ($monthlyBreakdown.length > 0 && monthlyChartContainer) {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+            renderMonthlyBreakdownChart();
+        }, 100);
+    }
+</script>
 
-    <svelte:head>
-        <title>Earnings & Reports - Device Management System</title>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.45.1/apexcharts.min.js"></script>
-    </svelte:head>
+<svelte:head>
+    <title>Earnings & Reports - Device Management System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.45.1/apexcharts.min.js"></script>
+</svelte:head>
 
-    <Header title="Earnings & Reports" />
+<Header title="Earnings & Reports" />
 
-    {#if $error}
-        <div class="error-banner">
-            <div class="error-content">
-                <span class="error-icon">⚠️</span>
-                <span class="error-message">{$error}</span>
-                <button class="error-close" on:click={earningsActions.clearError}>×</button>
-            </div>
-        </div>
-    {/if}
-
-    <div class="dashboard-content">
-        <!-- Earnings Overview Section -->
-        <div class="earnings-section">
-            <div class="section-header">
-                <h3 class="section-title">Seller Earnings ({$earnings.commissionRate}% Commission)</h3>
-                <div class="earnings-filter">
-                    <select 
-                        class="filter-select" 
-                        bind:value={selectedMonthValue} 
-                        on:change={handleMonthChange}
-                        disabled={$isLoading}
-                    >
-                        {#each monthOptions as option}
-                            <option value={option.value}>{option.label}</option>
-                        {/each}
-                    </select>
-                    <button 
-                        class="export-btn" 
-                        on:click={handleExport}
-                        disabled={$isExporting || $isLoading}
-                    >
-                        {#if $isExporting}
-                            Exporting...
-                        {:else}
-                            Export Data
-                        {/if}
-                    </button>
-                    <button 
-                        class="refresh-btn" 
-                        on:click={handleRefresh}
-                        disabled={$isLoading}
-                        title="Refresh data"
-                    >
-                        🔄
-                    </button>
-                </div>
-            </div>
-
-            {#if $isLoading}
-                <div class="loading-spinner">
-                    <div class="spinner"></div>
-                    <p>Loading earnings data...</p>
-                </div>
-            {:else}
-                <div class="earnings-cards">
-                    <div class="earnings-card">
-                        <div class="earnings-amount">{formatCurrency($earnings.thisMonth)}</div>
-                        <div class="earnings-label">This Month Earnings</div>
-                    </div>
-                    <div class="earnings-card">
-                        <div class="earnings-amount">{$earnings.devicesRecharged}</div>
-                        <div class="earnings-label">Devices Recharged</div>
-                    </div>
-                    <div class="earnings-card">
-                        <div class="earnings-amount">{formatCurrency($earnings.totalRechargeAmount)}</div>
-                        <div class="earnings-label">Total Recharge Amount</div>
-                    </div>
-                    <div class="earnings-card">
-                        <div class="earnings-amount">{$earnings.rechargeRate}%</div>
-                        <div class="earnings-label">Success Rate</div>
-                    </div>
-                </div>
-            {/if}
-        </div>
-
-        <!-- Subscription Distribution Chart -->
-        <div class="earnings-section">
-            <div class="section-header">
-                <div class="chart-header-content">
-                    <div class="chart-title-container">
-                        <h3 class="section-title">Subscription Distribution</h3>
-                        <div class="info-icon" title="Shows distribution of subscription plans sold this month">ℹ️</div>
-                    </div>
-                </div>
-            </div>
-
-            {#if chartLoading}
-                <div class="chart-loading">
-                    <div class="loading-spinner">
-                        <div class="spinner"></div>
-                        <p>Loading chart data...</p>
-                    </div>
-                </div>
-            {:else if localChartData.length === 0}
-                <div class="empty-chart">
-                    <div class="empty-icon">📊</div>
-                    <h4>No subscription data</h4>
-                    <p>No completed subscriptions found for {monthOptions.find(m => m.value === selectedMonthValue)?.label || selectedMonthValue}.</p>
-                </div>
-            {:else}
-                <div class="chart-container">
-                    <div id="subscription-chart" bind:this={subscriptionChartContainer}></div>
-                </div>
-                
-                <div class="chart-summary">
-                    <div class="summary-stats">
-                        <div class="stat-item">
-                            <span class="stat-value">{localChartData.reduce((sum, item) => sum + item.value, 0)}</span>
-                            <span class="stat-label">Total Subscriptions</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-value">{localChartData.length}</span>
-                            <span class="stat-label">Plan Types</span>
-                        </div>
-                    </div>
-                </div>
-            {/if}
-        </div>
-
-        <!-- Recent Transactions -->
-        <div class="earnings-section">
-            <div class="section-header">
-                <h3 class="section-title">Recent Transactions</h3>
-            </div>
-            
-            {#if $isLoading}
-                <div class="table-loading">
-                    <div class="skeleton-row"></div>
-                    <div class="skeleton-row"></div>
-                    <div class="skeleton-row"></div>
-                </div>
-            {:else if $earnings.recentTransactions.length === 0}
-                <div class="empty-state">
-                    <div class="empty-icon">📊</div>
-                    <h4>No transactions found</h4>
-                    <p>No recharge transactions for {monthOptions.find(m => m.value === selectedMonthValue)?.label || selectedMonthValue}.</p>
-                </div>
-            {:else}
-                <div class="transactions-table">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <!-- <th>Device ID</th>
-                                <th>Customer</th> -->
-                                <th>Plan</th>
-                                <th>Recharge Amount</th>
-                                <th>Commission</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each $earnings.recentTransactions as transaction}
-                                <tr>
-                                    <td>{transaction.date}</td>
-                                    <!-- <td>{transaction.deviceName}</td>
-                                    <td>{transaction.customerName}</td> -->
-                                    <td>{transaction.planName}</td>
-                                    <td>{formatCurrency(transaction.rechargeAmount)}</td>
-                                    <td>{formatCurrency(transaction.commission)}</td>
-                                    <td>
-                                        <span class="status-{transaction.status.toLowerCase()}">
-                                            {transaction.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                </div>
-            {/if}
+{#if $error}
+    <div class="error-banner">
+        <div class="error-content">
+            <span class="error-icon">⚠️</span>
+            <span class="error-message">{$error}</span>
+            <button class="error-close" on:click={earningsActions.clearError}>×</button>
         </div>
     </div>
+{/if}
 
-    <style>
-        .dashboard-content {
-            padding: 30px 40px;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+<div class="dashboard-content">
+    <!-- Earnings Overview Section -->
+    <div class="earnings-section">
+        <div class="section-header">
+            <h3 class="section-title">Seller Earnings ({$earnings.commissionRate}% Commission)</h3>
+            <div class="earnings-filter">
+                <select 
+                    class="filter-select" 
+                    bind:value={selectedMonthValue} 
+                    on:change={handleMonthChange}
+                    disabled={$isLoading}
+                >
+                    {#each monthOptions as option}
+                        <option value={option.value}>{option.label}</option>
+                    {/each}
+                </select>
+                <button 
+                    class="export-btn" 
+                    on:click={handleExport}
+                    disabled={$isExporting || $isLoading}
+                >
+                    {#if $isExporting}
+                        Exporting...
+                    {:else}
+                        Export Data
+                    {/if}
+                </button>
+                <button 
+                    class="refresh-btn" 
+                    on:click={handleRefresh}
+                    disabled={$isLoading}
+                    title="Refresh data"
+                >
+                    🔄
+                </button>
+            </div>
+        </div>
 
-        .earnings-section {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
-            margin-bottom: 30px;
-            border: 1px solid #f1f5f9;
-        }
+        {#if $isLoading}
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Loading earnings data...</p>
+            </div>
+        {:else}
+            <div class="earnings-cards">
+                <div class="earnings-card">
+                    <div class="earnings-amount">{formatCurrency($earnings.thisMonth)}</div>
+                    <div class="earnings-label">This Month Earnings</div>
+                </div>
+                <div class="earnings-card">
+                    <div class="earnings-amount">{$earnings.devicesRecharged}</div>
+                    <div class="earnings-label">Devices Recharged</div>
+                </div>
+                <div class="earnings-card">
+                    <div class="earnings-amount">{formatCurrency($earnings.totalRechargeAmount)}</div>
+                    <div class="earnings-label">Total Recharge Amount</div>
+                </div>
+                <div class="earnings-card">
+                    <div class="earnings-amount">{$earnings.rechargeRate}%</div>
+                    <div class="earnings-label">Success Rate</div>
+                </div>
+            </div>
+        {/if}
+    </div>
 
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #f1f5f9;
-        }
+    <!-- Subscription Distribution Chart -->
+    <div class="earnings-section">
+        <div class="section-header">
+            <div class="chart-header-content">
+                <div class="chart-title-container">
+                    <h3 class="section-title">Subscription Distribution</h3>
+                    <div class="info-icon" title="Shows distribution of subscription plans sold this month">ℹ️</div>
+                </div>
+            </div>
+        </div>
 
-        .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #2d3748;
-            margin: 0;
-        }
+        {#if chartLoading}
+            <div class="chart-loading">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading chart data...</p>
+                </div>
+            </div>
+        {:else if localChartData.length === 0}
+            <div class="empty-chart">
+                <div class="empty-icon">📊</div>
+                <h4>No subscription data</h4>
+                <p>No completed subscriptions found for {monthOptions.find(m => m.value === selectedMonthValue)?.label || selectedMonthValue}.</p>
+            </div>
+        {:else}
+            <div class="chart-container">
+                <div id="subscription-chart" bind:this={subscriptionChartContainer}></div>
+            </div>
+            
+            <div class="chart-summary">
+                <div class="summary-stats">
+                    <div class="stat-item">
+                        <span class="stat-value">{localChartData.reduce((sum, item) => sum + item.value, 0)}</span>
+                        <span class="stat-label">Total Subscriptions</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{localChartData.length}</span>
+                        <span class="stat-label">Plan Types</span>
+                    </div>
+                </div>
+            </div>
+        {/if}
+    </div>
 
-        .earnings-filter {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
+    <!-- Monthly Breakdown Section -->
+    <div class="earnings-section">
+        <div class="section-header">
+            <div class="chart-header-content">
+                <div class="chart-title-container">
+                    <h3 class="section-title">Monthly Breakdown (Last 6 Months)</h3>
+                    <div class="info-icon" title="Shows earnings and transaction trends over the last 6 months">ℹ️</div>
+                </div>
+            </div>
+        </div>
+        
+        {#if $isLoading}
+            <div class="chart-loading">
+                <div class="loading-spinner">
+                    <div class="spinner"></div>
+                    <p>Loading monthly breakdown...</p>
+                </div>
+            </div>
+        {:else if $monthlyBreakdown.length === 0}
+            <div class="empty-chart">
+                <div class="empty-icon">📈</div>
+                <h4>No monthly data</h4>
+                <p>No earnings data found for the last 6 months.</p>
+            </div>
+        {:else}
+            <div class="chart-container">
+                <div id="monthly-breakdown-chart" bind:this={monthlyChartContainer}></div>
+            </div>
+            
+            <div class="monthly-breakdown-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Earnings</th>
+                            <th>Transactions</th>
+                            <th>Total Amount</th>
+                            <th>Success Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each $monthlyBreakdown as breakdown}
+                            <tr>
+                                <td>{breakdown.fullMonth}</td>
+                                <td>{formatCurrency(breakdown.earnings)}</td>
+                                <td>{breakdown.transactions}</td>
+                                <td>{formatCurrency(breakdown.totalAmount)}</td>
+                                <td>
+                                    <span class="success-rate">
+                                        {breakdown.successRate}%
+                                    </span>
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        {/if}
+    </div>
+</div>
 
-        .filter-select {
-            padding: 10px 15px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            transition: border-color 0.2s ease;
-            font-size: 14px;
-        }
+<style>
+    .dashboard-content {
+        padding: 30px 40px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
 
-        .filter-select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
+    .earnings-section {
+        background: white;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+        margin-bottom: 30px;
+        border: 1px solid #f1f5f9;
+    }
 
-        .filter-select:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #f1f5f9;
+    }
 
-        .export-btn, .refresh-btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            font-size: 14px;
-        }
+    .section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #2d3748;
+        margin: 0;
+    }
 
-        .refresh-btn {
-            padding: 10px;
-            min-width: auto;
-        }
+    .earnings-filter {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
 
-        .export-btn:hover:not(:disabled),
-        .refresh-btn:hover:not(:disabled) {
-            background: #5a67d8;
-            transform: translateY(-1px);
-        }
+    .filter-select {
+        padding: 10px 15px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: border-color 0.2s ease;
+        font-size: 14px;
+    }
 
-        .export-btn:disabled,
-        .refresh-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
+    .filter-select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
 
-        .earnings-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
+    .filter-select:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
 
-        .earnings-card {
-            background: linear-gradient(135deg, #667eea10, #764ba210);
-            padding: 25px 20px;
-            border-radius: 12px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s ease;
-            border: 1px solid #e2e8f0;
-        }
+    .export-btn, .refresh-btn {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
 
-        .earnings-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
-        }
+    .refresh-btn {
+        padding: 10px;
+        min-width: auto;
+    }
 
-        .earnings-amount {
-            font-size: 28px;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 8px;
-            line-height: 1;
-        }
+    .export-btn:hover:not(:disabled),
+    .refresh-btn:hover:not(:disabled) {
+        background: #5a67d8;
+        transform: translateY(-1px);
+    }
 
-        .earnings-label {
-            color: #718096;
-            font-size: 14px;
-            font-weight: 500;
-        }
+    .export-btn:disabled,
+    .refresh-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
 
-        .chart-header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-        }
+    .earnings-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+    }
 
-        .chart-title-container {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+    .earnings-card {
+        background: linear-gradient(135deg, #667eea10, #764ba210);
+        padding: 25px 20px;
+        border-radius: 12px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        border: 1px solid #e2e8f0;
+    }
 
-        .info-icon {
-            font-size: 14px;
-            color: #718096;
-            cursor: help;
-            opacity: 0.7;
-        }
+    .earnings-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+    }
 
-        .chart-container {
-            min-height: 320px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px 0;
-        }
+    .earnings-amount {
+        font-size: 28px;
+        font-weight: 700;
+        color: #667eea;
+        margin-bottom: 8px;
+        line-height: 1;
+    }
 
-        #subscription-chart {
-            width: 100%;
-            height: 320px;
-        }
+    .earnings-label {
+        color: #718096;
+        font-size: 14px;
+        font-weight: 500;
+    }
 
-        .chart-summary {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #f1f5f9;
-        }
+    .chart-header-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
 
-        .summary-stats {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-        }
+    .chart-title-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
 
-        .stat-item {
-            text-align: center;
-        }
+    .info-icon {
+        font-size: 14px;
+        color: #718096;
+        cursor: help;
+        opacity: 0.7;
+    }
 
-        .stat-value {
-            display: block;
-            font-size: 24px;
-            font-weight: 700;
-            color: #667eea;
-        }
+    .chart-container {
+        min-height: 320px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 0;
+    }
 
-        .stat-label {
-            font-size: 14px;
-            color: #718096;
-            font-weight: 500;
-        }
+    #subscription-chart, #monthly-breakdown-chart {
+        width: 100%;
+        height: 320px;
+    }
 
-        .chart-loading {
-            min-height: 320px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #718096;
-        }
+    #monthly-breakdown-chart {
+        height: 350px;
+    }
 
-        .empty-chart {
-            min-height: 320px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #718096;
-            text-align: center;
-        }
+    .chart-summary {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #f1f5f9;
+    }
 
-        .empty-chart .empty-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-            opacity: 0.5;
-        }
+    .summary-stats {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+    }
 
-        .empty-chart h4 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #4a5568;
-        }
+    .stat-item {
+        text-align: center;
+    }
 
-        .empty-chart p {
-            font-size: 14px;
-            max-width: 300px;
-        }
+    .stat-value {
+        display: block;
+        font-size: 24px;
+        font-weight: 700;
+        color: #667eea;
+    }
 
-        .transactions-table {
-            overflow-x: auto;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
+    .stat-label {
+        font-size: 14px;
+        color: #718096;
+        font-weight: 500;
+    }
 
-        .transactions-table table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+    .chart-loading {
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #718096;
+    }
 
-        .transactions-table th,
-        .transactions-table td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid #f1f5f9;
-        }
+    .empty-chart {
+        min-height: 320px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #718096;
+        text-align: center;
+    }
 
-        .transactions-table th {
-            background: #f8fafc;
-            font-weight: 600;
-            color: #4a5568;
-            font-size: 14px;
-            position: sticky;
-            top: 0;
-        }
+    .empty-chart .empty-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
 
-        .transactions-table td {
-            font-size: 14px;
-            color: #2d3748;
-        }
+    .empty-chart h4 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #4a5568;
+    }
 
-        .transactions-table tbody tr:hover {
-            background: #f8fafc;
-        }
+    .empty-chart p {
+        font-size: 14px;
+        max-width: 300px;
+    }
 
-        .status-completed {
-            background: #c6f6d5;
-            color: #22543d;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+    .monthly-breakdown-table {
+        overflow-x: auto;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin-top: 20px;
+    }
 
-        .status-pending {
-            background: #febb5b20;
-            color: #744210;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+    .monthly-breakdown-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
 
-        .status-failed {
-            background: #fed7d7;
-            color: #742a2a;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+    .monthly-breakdown-table th,
+    .monthly-breakdown-table td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid #f1f5f9;
+    }
 
-        .loading-spinner {
-            text-align: center;
-            padding: 40px;
-        }
+    .monthly-breakdown-table th {
+        background: #f8fafc;
+        font-weight: 600;
+        color: #4a5568;
+        font-size: 14px;
+        position: sticky;
+        top: 0;
+    }
 
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f1f5f9;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
+    .monthly-breakdown-table td {
+        font-size: 14px;
+        color: #2d3748;
+    }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+    .monthly-breakdown-table tbody tr:hover {
+        background: #f8fafc;
+    }
 
-        .table-loading {
-            padding: 20px;
-        }
+    .success-rate {
+        background: #c6f6d5;
+        color: #22543d;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
 
-        .skeleton-row {
-            height: 50px;
-            background: linear-gradient(90deg, #f8fafc 25%, #f1f5f9 50%, #f8fafc 75%);
-            background-size: 200% 100%;
-            animation: loading 1.5s infinite;
-            margin-bottom: 10px;
-            border-radius: 8px;
-        }
+    .loading-spinner {
+        text-align: center;
+        padding: 40px;
+    }
 
-        @keyframes loading {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
+    .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #f1f5f9;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }
 
-        .empty-state {
-            text-align: center;
-            padding: 60px 40px;
-            color: #718096;
-        }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 
-        .empty-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-            opacity: 0.5;
-        }
-
-        .empty-state h4 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #4a5568;
-        }
-
-        .empty-state p {
-            font-size: 14px;
-            max-width: 300px;
-            margin: 0 auto;
-        }
-
-        .error-banner {
+    .error-banner {
             background: #fed7d7;
             border: 1px solid #feb2b2;
             border-radius: 8px;
             margin: 20px 40px;
+            padding: 0;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .error-content {
             display: flex;
             align-items: center;
-            padding: 15px 20px;
-            gap: 10px;
+            padding: 12px 16px;
+            gap: 12px;
         }
 
         .error-icon {
-            font-size: 20px;
+            font-size: 18px;
+            flex-shrink: 0;
         }
 
         .error-message {
-            flex: 1;
             color: #742a2a;
+            font-size: 14px;
             font-weight: 500;
+            flex-grow: 1;
         }
 
         .error-close {
             background: none;
             border: none;
-            font-size: 20px;
             color: #742a2a;
+            font-size: 18px;
+            font-weight: bold;
             cursor: pointer;
-            padding: 0;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            padding: 4px 8px;
             border-radius: 4px;
             transition: background-color 0.2s ease;
+            flex-shrink: 0;
         }
 
         .error-close:hover {
@@ -981,19 +995,17 @@
         /* Responsive Design */
         @media (max-width: 768px) {
             .dashboard-content {
+                padding: 20px 20px;
+            }
+
+            .earnings-section {
                 padding: 20px;
             }
 
             .section-header {
                 flex-direction: column;
-                align-items: flex-start;
                 gap: 15px;
-            }
-
-            .chart-header-content {
-                flex-direction: column;
                 align-items: flex-start;
-                gap: 10px;
             }
 
             .earnings-filter {
@@ -1001,13 +1013,8 @@
                 justify-content: space-between;
             }
 
-            .filter-select {
-                flex: 1;
-                margin-right: 10px;
-            }
-
             .earnings-cards {
-                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                 gap: 15px;
             }
 
@@ -1023,46 +1030,44 @@
                 gap: 20px;
             }
 
-            .transactions-table {
+            .stat-value {
+                font-size: 20px;
+            }
+
+            .error-banner {
+                margin: 20px 20px;
+            }
+
+            .monthly-breakdown-table {
                 font-size: 12px;
             }
 
-            .transactions-table th,
-            .transactions-table td {
-                padding: 8px 10px;
+            .monthly-breakdown-table th,
+            .monthly-breakdown-table td {
+                padding: 8px 12px;
             }
         }
 
         @media (max-width: 480px) {
-            .dashboard-content {
-                padding: 15px;
-            }
-
-            .earnings-section {
-                padding: 20px 15px;
-            }
-
             .earnings-cards {
                 grid-template-columns: 1fr;
-            }
-
-            .section-title {
-                font-size: 16px;
-            }
-
-            .earnings-filter {
-                flex-direction: column;
-                width: 100%;
-            }
-
-            .filter-select,
-            .export-btn {
-                width: 100%;
             }
 
             .summary-stats {
                 flex-direction: column;
                 gap: 15px;
             }
+
+            .earnings-filter {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .filter-select,
+            .export-btn,
+            .refresh-btn {
+                width: 100%;
+            }
         }
-    </style>
+
+</style>

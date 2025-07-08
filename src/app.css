@@ -1,1 +1,14 @@
 @import 'tailwindcss';
+
+.main-content {
+    margin-left: 280px;
+    padding: 20px;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 70px;
+    }
+}

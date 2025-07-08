@@ -77,9 +77,12 @@
         border-right: 1px solid rgba(255, 255, 255, 0.2);
         padding: 20px 0;
         position: fixed;
+        top: 0;
+        left: 0;
         height: 100vh;
         overflow-y: auto;
         z-index: 100;
+        box-sizing: border-box;
     }
 
     .logo {
@@ -126,6 +129,7 @@
         cursor: pointer;
         font-family: inherit;
         font-size: inherit;
+        box-sizing: border-box;
     }
 
     .nav-link:hover, .nav-link.active {
@@ -144,6 +148,7 @@
         height: 20px;
         margin-right: 15px;
         font-size: 18px;
+        flex-shrink: 0;
     }
 
     @media (max-width: 768px) {
@@ -153,6 +158,29 @@
         
         .nav-link span:not(.nav-icon) {
             display: none;
+        }
+        
+        .nav-link {
+            padding: 15px 10px;
+            justify-content: center;
+        }
+        
+        .nav-icon {
+            margin-right: 0;
+        }
+    }
+
+    /* Global styles for main content area - add this to your global CSS */
+    :global(.main-content) {
+        margin-left: 280px;
+        padding: 20px;
+        min-height: 100vh;
+        box-sizing: border-box;
+    }
+
+    @media (max-width: 768px) {
+        :global(.main-content) {
+            margin-left: 70px;
         }
     }
 </style>

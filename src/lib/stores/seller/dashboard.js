@@ -5,7 +5,7 @@ import {
   getSellerEarningsSummary,
   getSubscriptionDistribution,
   exportSellerEarnings
-} from '../seller/earning.js';
+} from './earning.js';
 
 // Core stores
 export const currentSellerId = writable(null);
@@ -67,7 +67,8 @@ export const earningsActions = {
     isLoading.set(true);
     error.set(null);
 try {
-  const earningsData = await getSellerEarnings(sellerId, month);
+  const currentMonth = get(selectedMonth);
+  const earningsData = await getSellerEarnings(sellerId, currentMonth);
   if (!earningsData) {
     throw new Error('No earnings data received');
   }
