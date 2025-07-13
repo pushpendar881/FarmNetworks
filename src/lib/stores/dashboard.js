@@ -60,6 +60,30 @@ async function getCurrentUser() {
     return user;
 }
 
+// Utility function to get current seller ID
+async function getCurrentSellerId() {
+    try {
+        const currentUser = await getCurrentUser();
+        if (!currentUser) return null;
+
+        // Check if user is a seller by looking at user_profiles
+        const { data: userProfile } = await supabase
+            .from('user_profiles')
+            .select('role')
+            .eq('id', currentUser.id)
+            .single();
+
+        if (userProfile && userProfile.role === 'seller') {
+            return currentUser.id;
+        }
+
+        return null;
+    } catch (err) {
+        console.error('Error getting current seller ID:', err);
+        return null;
+    }
+}
+
 // Function to load masters and devices data - Updated for new schema
 export async function loadMastersData(sellerId = null) {
     loading.update(state => ({ ...state, masters: true }));
@@ -98,15 +122,13 @@ export async function loadMastersData(sellerId = null) {
                     .from('devices')
                     .select(`
                         id,
+                        device_id,
                         device_name,
                         device_type,
                         motor_status,
                         error_status,
                         installation_date,
-                        warranty_until,
-                        customer_name,
-                        customer_phone,
-                        customer_email
+                        last_updated
                     `)
                     .eq('gateway_id', gateway.id);
                 
@@ -123,7 +145,9 @@ export async function loadMastersData(sellerId = null) {
         const allDeviceIds = new Set();
         gatewaysWithDevices.forEach(gateway => {
             gateway.devices.forEach(device => {
-                allDeviceIds.add(device.id);
+                if (device.device_id) {
+                    allDeviceIds.add(device.device_id);
+                }
             });
         });
 
@@ -168,7 +192,7 @@ export async function loadMastersData(sellerId = null) {
             currentDeviceCount: gateway.current_device_count,
             nodes: gateway.devices.map(device => {
                 // Get device's subscriptions using the renamed map
-                const deviceSubs = deviceSubscriptionsMap[device.id] || [];
+                const deviceSubs = deviceSubscriptionsMap[device.device_id] || [];
                 const latestSubscription = deviceSubs
                     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
         
@@ -176,7 +200,7 @@ export async function loadMastersData(sellerId = null) {
                     id: device.device_id,
                     name: device.device_name || device.device_id,
                     status: device.motor_status === 1 ? 'online' : 'offline',
-                    lastActive: getTimeAgo(device.updated_at),
+                    lastActive: getTimeAgo(device.last_updated),
                     rechargeDate: latestSubscription 
                         ? new Date(latestSubscription.valid_from).toLocaleDateString('en-GB')
                         : 'Not recharged',
@@ -226,13 +250,32 @@ export async function loadDashboardStats(sellerId = null) {
         const { count: totalMasters, error: gatewayError } = await gatewayQuery;
         if (gatewayError) throw gatewayError;
 
-        // Get devices count
+        // Get devices count - devices are linked to gateways, not directly to sellers
         let deviceQuery = supabase
             .from('devices')
             .select('*', { count: 'exact', head: true });
             
         if (sellerId) {
-            deviceQuery = deviceQuery.eq('seller_id', sellerId);
+            // Get seller's gateways first, then count devices in those gateways
+            const { data: sellerGateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerId);
+                
+            if (sellerGateways && sellerGateways.length > 0) {
+                const gatewayIds = sellerGateways.map(g => g.id);
+                deviceQuery = deviceQuery.in('gateway_id', gatewayIds);
+            } else {
+                // No gateways found for seller, set count to 0
+                const newStats = {
+                    totalMasters: totalMasters || 0,
+                    totalDevices: 0,
+                    onlineDevices: 0,
+                    rechargedThisMonth: 0
+                };
+                rawStats.set(newStats);
+                return { success: true, data: newStats };
+            }
         }
         
         const { count: totalDevices, error: deviceError } = await deviceQuery;
@@ -245,7 +288,26 @@ export async function loadDashboardStats(sellerId = null) {
             .eq('motor_status', 1);
             
         if (sellerId) {
-            onlineDeviceQuery = onlineDeviceQuery.eq('seller_id', sellerId);
+            // Get seller's gateways first, then count online devices in those gateways
+            const { data: sellerGateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerId);
+                
+            if (sellerGateways && sellerGateways.length > 0) {
+                const gatewayIds = sellerGateways.map(g => g.id);
+                onlineDeviceQuery = onlineDeviceQuery.in('gateway_id', gatewayIds);
+            } else {
+                // No gateways found for seller, set count to 0
+                const newStats = {
+                    totalMasters: totalMasters || 0,
+                    totalDevices: totalDevices || 0,
+                    onlineDevices: 0,
+                    rechargedThisMonth: 0
+                };
+                rawStats.set(newStats);
+                return { success: true, data: newStats };
+            }
         }
         
         const { count: onlineDevices, error: onlineError } = await onlineDeviceQuery;
@@ -259,11 +321,47 @@ export async function loadDashboardStats(sellerId = null) {
         let rechargeQuery = supabase
             .from('subscriptions')
             .select('device_id', { count: 'exact', head: true })
-            .gte('valid_from', startOfMonth.toISOString())
-            .eq('payment_status', 'completed');
+            .gte('valid_from', startOfMonth.toISOString());
             
         if (sellerId) {
-            rechargeQuery = rechargeQuery.eq('seller_id', sellerId);
+            // Get seller's gateways first, then get devices in those gateways
+            const { data: sellerGateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerId);
+                
+            if (sellerGateways && sellerGateways.length > 0) {
+                const gatewayIds = sellerGateways.map(g => g.id);
+                const { data: sellerDevices } = await supabase
+                    .from('devices')
+                    .select('device_id')
+                    .in('gateway_id', gatewayIds);
+                    
+                if (sellerDevices && sellerDevices.length > 0) {
+                    const deviceIds = sellerDevices.map(d => d.device_id);
+                    rechargeQuery = rechargeQuery.in('device_id', deviceIds);
+                } else {
+                    // No devices found for seller's gateways
+                    const newStats = {
+                        totalMasters: totalMasters || 0,
+                        totalDevices: totalDevices || 0,
+                        onlineDevices: onlineDevices || 0,
+                        rechargedThisMonth: 0
+                    };
+                    rawStats.set(newStats);
+                    return { success: true, data: newStats };
+                }
+            } else {
+                // No gateways found for seller
+                const newStats = {
+                    totalMasters: totalMasters || 0,
+                    totalDevices: totalDevices || 0,
+                    onlineDevices: onlineDevices || 0,
+                    rechargedThisMonth: 0
+                };
+                rawStats.set(newStats);
+                return { success: true, data: newStats };
+            }
         }
         
         const { count: rechargedThisMonth, error: rechargeError } = await rechargeQuery;
@@ -299,23 +397,64 @@ export async function loadEarningsData(sellerId) {
     error.update(state => ({ ...state, earnings: null }));
 
     try {
-        // Get current month's subscriptions
+        // Get current month's subscriptions for seller's devices
         const startOfMonth = new Date();
         startOfMonth.setDate(1);
         startOfMonth.setHours(0, 0, 0, 0);
         
+        // First get seller's gateways
+        const { data: sellerGateways } = await supabase
+            .from('gateways')
+            .select('id')
+            .eq('seller_id', sellerId);
+            
+        if (!sellerGateways || sellerGateways.length === 0) {
+            // No gateways found for seller
+            const earningsData = {
+                thisMonth: 0,
+                devicesRecharged: 0,
+                totalRechargeAmount: 0,
+                rechargeRate: 0,
+                totalEarnings: 0
+            };
+            earnings.set(earningsData);
+            return { success: true, data: earningsData };
+        }
+        
+        // Get devices in seller's gateways
+        const gatewayIds = sellerGateways.map(g => g.id);
+        const { data: sellerDevices } = await supabase
+            .from('devices')
+            .select('device_id')
+            .in('gateway_id', gatewayIds);
+            
+        if (!sellerDevices || sellerDevices.length === 0) {
+            // No devices found for seller's gateways
+            const earningsData = {
+                thisMonth: 0,
+                devicesRecharged: 0,
+                totalRechargeAmount: 0,
+                rechargeRate: 0,
+                totalEarnings: 0
+            };
+            earnings.set(earningsData);
+            return { success: true, data: earningsData };
+        }
+        
+        // Get subscriptions for seller's devices
+        const deviceIds = sellerDevices.map(d => d.device_id);
         const { data: subscriptions, error: subError } = await supabase
             .from('subscriptions')
-            .select('amount, commission_amount')
-            .eq('seller_id', sellerId)
-            .eq('payment_status', 'completed')
+            .select('amount')
+            .in('device_id', deviceIds)
             .gte('valid_from', startOfMonth.toISOString());
             
         if (subError) throw subError;
 
-        // Calculate earnings
+        // Calculate earnings (assuming 10% commission rate for now)
+        const commissionRate = 10; // Default commission rate
         const thisMonth = subscriptions?.reduce((sum, sub) => 
-            sum + (parseFloat(sub.commission_amount) || 0), 0
+            sum + (parseFloat(sub.amount) * commissionRate / 100), 0
         ) || 0;
         
         const devicesRecharged = subscriptions?.length || 0;
@@ -323,14 +462,13 @@ export async function loadEarningsData(sellerId) {
             sum + (parseFloat(sub.amount) || 0), 0
         ) || 0;
 
-        // Get seller's commission rate and total sales
+        // Get seller's total sales from seller_profiles
         const { data: sellerProfile } = await supabase
             .from('seller_profiles')
-            .select('commission_rate, total_sales')
+            .select('total_sales')
             .eq('id', sellerId)
             .single();
 
-        const commissionRate = parseFloat(sellerProfile?.commission_rate) || 10;
         const rechargeRate = devicesRecharged > 0 ? 100 : 0;
 
         const earningsData = {
@@ -353,7 +491,7 @@ export async function loadEarningsData(sellerId) {
     }
 }
 
-// Function to load user profile
+// Function to load user profile - Updated for dual-table structure
 export async function loadUserProfile() {
     try {
         const currentUser = await getCurrentUser();
@@ -361,21 +499,49 @@ export async function loadUserProfile() {
             throw new Error('No authenticated user');
         }
 
-        const { data: profile, error } = await supabase
+        // Get user profile from user_profiles table
+        const { data: userProfile, error: userError } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', currentUser.id)
             .single();
 
-        if (error) throw error;
+        if (userError) throw userError;
+
+        // If user is a seller, also get seller profile
+        let combinedProfile = userProfile;
+        if (userProfile.role === 'seller') {
+            const { data: sellerProfile, error: sellerError } = await supabase
+                .from('seller_profiles')
+                .select('*')
+                .eq('id', currentUser.id)
+                .single();
+
+            if (!sellerError && sellerProfile) {
+                // Combine user_profile and seller_profile data
+                combinedProfile = {
+                    ...userProfile,
+                    business_name: sellerProfile.business_name,
+                    business_type: sellerProfile.business_type,
+                    address: sellerProfile.address,
+                    city: sellerProfile.city,
+                    state: sellerProfile.state,
+                    pincode: sellerProfile.pincode,
+                    gstin: sellerProfile.gstin,
+                    total_sales: sellerProfile.total_sales,
+                    is_approved: sellerProfile.is_approved,
+                    approved_at: sellerProfile.approved_at
+                };
+            }
+        }
 
         user.update(state => ({
             ...state,
-            name: profile.full_name,
-            initials: getInitials(profile.full_name)
+            name: combinedProfile.full_name,
+            initials: getInitials(combinedProfile.full_name)
         }));
 
-        return { success: true, profile };
+        return { success: true, profile: combinedProfile };
 
     } catch (err) {
         console.error('Error loading user profile:', err);
@@ -415,6 +581,11 @@ function getTimeAgo(dateString) {
 // Initialize dashboard
 export async function initializeDashboard(sellerId = null) {
     try {
+        // If no sellerId provided, try to get it automatically
+        if (!sellerId) {
+            sellerId = await getCurrentSellerId();
+        }
+
         await Promise.all([
             loadMastersData(sellerId),
             loadDashboardStats(sellerId),
@@ -432,6 +603,11 @@ export async function initializeDashboard(sellerId = null) {
 // Refresh dashboard data
 export async function refreshDashboard(sellerId = null) {
     try {
+        // If no sellerId provided, try to get it automatically
+        if (!sellerId) {
+            sellerId = await getCurrentSellerId();
+        }
+
         await Promise.all([
             loadMastersData(sellerId),
             loadDashboardStats(sellerId),

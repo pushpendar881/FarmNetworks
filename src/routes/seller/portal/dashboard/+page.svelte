@@ -12,7 +12,6 @@
         refreshDashboard 
     } from '$lib/stores/dashboard.js';
     import { onMount } from 'svelte';
-    import { sellerStore, currentSeller } from '$lib/stores/sellerStore.js';
     import { user } from '$lib/stores/auth.js';
     import { supabase } from '$lib/supabase.js';
     import { goto } from '$app/navigation';
@@ -73,20 +72,55 @@
         dashboardError = null;
 
         try {
-            // Load seller profile first
-            const sellerResult = await sellerStore.loadCurrentSeller();
+            // Load seller profile first using the updated auth store
+            const { data: { user } } = await supabase.auth.getUser();
             
-            if (sellerResult.success) {
-                sellerProfile = sellerResult.profile;
-                
-                // Initialize dashboard with seller ID
-                const dashboardResult = await initializeDashboard(sellerProfile.id);
-                
-                if (!dashboardResult.success) {
-                    dashboardError = dashboardResult.error || 'Failed to load dashboard data';
-                }
-            } else {
-                errorMessage = sellerResult.error;
+            if (!user) {
+                errorMessage = 'User not authenticated';
+                return;
+            }
+
+            // Get user profile from user_profiles table
+            const { data: userProfile, error: userError } = await supabase
+                .from('user_profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (userError) {
+                errorMessage = 'Failed to load user profile';
+                return;
+            }
+
+            // Check if user is a seller
+            if (userProfile.role !== 'seller') {
+                errorMessage = 'Access denied. Seller account required.';
+                return;
+            }
+
+            // Get seller profile from seller_profiles table
+            const { data: sellerProfileData, error: sellerError } = await supabase
+                .from('seller_profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (sellerError) {
+                errorMessage = 'Failed to load seller profile';
+                return;
+            }
+
+            // Combine user and seller profile data
+            sellerProfile = {
+                ...userProfile,
+                ...sellerProfileData
+            };
+            
+            // Initialize dashboard with seller ID
+            const dashboardResult = await initializeDashboard(user.id);
+            
+            if (!dashboardResult.success) {
+                dashboardError = dashboardResult.error || 'Failed to load dashboard data';
             }
         } catch (err) {
             console.error('Error loading data:', err);
@@ -146,6 +180,13 @@
                     devices: devices ? devices.length : 0,
                     fullDate: monthDate
                 });
+            } else {
+                // No gateways found, add month with 0 devices
+                monthsData.push({
+                    month: monthDate.toLocaleDateString('en', { month: 'short' }),
+                    devices: 0,
+                    fullDate: monthDate
+                });
             }
         }
         
@@ -160,23 +201,54 @@
             const monthDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
             const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - i + 1, 1);
             
-            // Get earnings for this month
-            const { data: subscriptions } = await supabase
-                .from('subscriptions')
-                .select('commission_amount')
-                .eq('seller_id', sellerProfile.id)
-                .eq('payment_status', 'completed')
-                .gte('valid_from', monthDate.toISOString())
-                .lt('valid_from', nextMonth.toISOString());
-            
-            const monthEarnings = subscriptions 
-                ? subscriptions.reduce((sum, sub) => sum + (sub.commission_amount || 0), 0)
-                : 0;
-            
-            earningsData.push({
-                month: monthDate.toLocaleDateString('en', { month: 'short' }),
-                earnings: Math.round(monthEarnings)
-            });
+            // Get seller's gateways first
+            const { data: gateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerProfile.id);
+                
+            if (gateways && gateways.length > 0) {
+                const gatewayIds = gateways.map(g => g.id);
+                
+                // Get devices in seller's gateways
+                const { data: sellerDevices } = await supabase
+                    .from('devices')
+                    .select('device_id')
+                    .in('gateway_id', gatewayIds);
+                    
+                if (sellerDevices && sellerDevices.length > 0) {
+                    const deviceIds = sellerDevices.map(d => d.device_id);
+                    
+                    // Get subscriptions for seller's devices
+                    const { data: subscriptions } = await supabase
+                        .from('subscriptions')
+                        .select('amount')
+                        .in('device_id', deviceIds)
+                        .gte('valid_from', monthDate.toISOString())
+                        .lt('valid_from', nextMonth.toISOString());
+                    
+                    // Calculate earnings (assuming 10% commission rate)
+                    const commissionRate = 10;
+                    const monthEarnings = subscriptions 
+                        ? subscriptions.reduce((sum, sub) => sum + (parseFloat(sub.amount) * commissionRate / 100), 0)
+                        : 0;
+                    
+                    earningsData.push({
+                        month: monthDate.toLocaleDateString('en', { month: 'short' }),
+                        earnings: Math.round(monthEarnings)
+                    });
+                } else {
+                    earningsData.push({
+                        month: monthDate.toLocaleDateString('en', { month: 'short' }),
+                        earnings: 0
+                    });
+                }
+            } else {
+                earningsData.push({
+                    month: monthDate.toLocaleDateString('en', { month: 'short' }),
+                    earnings: 0
+                });
+            }
         }
         
         monthlyEarningsData = earningsData;
@@ -199,7 +271,10 @@
             .select('id, name')
             .eq('seller_id', sellerProfile.id);
             
-        if (!gateways || gateways.length === 0) return;
+        if (!gateways || gateways.length === 0) {
+            recentAlerts = [];
+            return;
+        }
         
         const gatewayIds = gateways.map(g => g.id);
         const gatewayMap = Object.fromEntries(gateways.map(g => [g.id, g.name]));
@@ -207,10 +282,10 @@
         // Get devices with issues
         const { data: problemDevices } = await supabase
             .from('devices')
-            .select('device_id, device_name, gateway_id, motor_status, error_status, updated_at')
+            .select('device_id, device_name, gateway_id, motor_status, error_status, last_updated')
             .in('gateway_id', gatewayIds)
             .or('motor_status.eq.0,error_status.neq.0')
-            .order('updated_at', { ascending: false })
+            .order('last_updated', { ascending: false })
             .limit(5);
         
         recentAlerts = (problemDevices || []).map((device, index) => ({
@@ -223,7 +298,7 @@
                     ? 'Device error detected' 
                     : 'Status unknown',
             type: device.error_status !== 0 ? 'error' : 'warning',
-            time: getTimeAgo(device.updated_at)
+            time: getTimeAgo(device.last_updated)
         }));
     }
 

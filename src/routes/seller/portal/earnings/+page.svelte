@@ -18,6 +18,7 @@
     let sellerId = null;
     let selectedMonthValue = new Date().toISOString().slice(0, 7);
     let monthOptions = [];
+    let commissionRate = 10; // Default fallback rate
     
     // Chart variables
     let subscriptionChart = null;
@@ -43,7 +44,10 @@
             sellerId = seller?.profile?.id;
             
             if (sellerId) {
-                // Generate month options first
+                // Load commission rate first
+                await loadCommissionRate();
+                
+                // Generate month options
                 monthOptions = generateMonthOptions();
                 
                 // Set initial selected month in store
@@ -60,6 +64,30 @@
             }   
         } catch (err) {
             console.error('Error initializing component:', err);
+        }
+    }
+
+    async function loadCommissionRate() {
+        try {
+            const { data: commissionData, error: commissionError } = await supabase
+                .from('commissions')
+                .select('rate')
+                .eq('is_active', true)
+                .single();
+            
+            if (commissionError) {
+                console.error('Error loading commission rate:', commissionError);
+                // Keep default rate of 10
+                return;
+            }
+            
+            if (commissionData) {
+                commissionRate = commissionData.rate;
+                console.log('Loaded commission rate:', commissionRate);
+            }
+        } catch (err) {
+            console.error('Error fetching commission rate:', err);
+            // Keep default rate of 10
         }
     }
 
@@ -91,11 +119,35 @@
             
             console.log('Start date:', startDate.toISOString().split('T')[0], 'End date:', endDate.toISOString().split('T')[0]);
             
+            // First get seller's gateways
+            const { data: sellerGateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerId);
+                
+            if (!sellerGateways || sellerGateways.length === 0) {
+                processSubscriptionData([]);
+                return;
+            }
+            
+            // Get devices in seller's gateways
+            const gatewayIds = sellerGateways.map(g => g.id);
+            const { data: sellerDevices } = await supabase
+                .from('devices')
+                .select('device_id, device_name, user_id, gateway_id')
+                .in('gateway_id', gatewayIds);
+                
+            if (!sellerDevices || sellerDevices.length === 0) {
+                processSubscriptionData([]);
+                return;
+            }
+            
+            // Get subscriptions for seller's devices
+            const deviceIds = sellerDevices.map(d => d.device_id);
             const { data: subscriptions, error } = await supabase
                 .from('subscriptions')
                 .select('*')
-                .eq('seller_id', sellerId)
-                .eq('payment_status', 'completed')
+                .in('device_id', deviceIds)
                 .gte('valid_from', startDate.toISOString().split('T')[0])
                 .lt('valid_from', endDate.toISOString().split('T')[0]);
             
@@ -137,18 +189,69 @@
                 const startDate = new Date(year, month - 1, 1);
                 const endDate = new Date(year, month, 1);
                 
+                // Get seller's gateways first
+                const { data: sellerGateways } = await supabase
+                    .from('gateways')
+                    .select('id')
+                    .eq('seller_id', sellerId);
+                    
+                if (!sellerGateways || sellerGateways.length === 0) {
+                    breakdownData.push({
+                        month: date.toLocaleDateString('en-IN', { 
+                            month: 'short', 
+                            year: '2-digit' 
+                        }),
+                        fullMonth: date.toLocaleDateString('en-IN', { 
+                            month: 'long', 
+                            year: 'numeric' 
+                        }),
+                        earnings: 0,
+                        transactions: 0,
+                        totalAmount: 0,
+                        successRate: 0
+                    });
+                    continue;
+                }
+                
+                // Get devices in seller's gateways
+                const gatewayIds = sellerGateways.map(g => g.id);
+                const { data: sellerDevices } = await supabase
+                    .from('devices')
+                    .select('device_id')
+                    .in('gateway_id', gatewayIds);
+                    
+                if (!sellerDevices || sellerDevices.length === 0) {
+                    breakdownData.push({
+                        month: date.toLocaleDateString('en-IN', { 
+                            month: 'short', 
+                            year: '2-digit' 
+                        }),
+                        fullMonth: date.toLocaleDateString('en-IN', { 
+                            month: 'long', 
+                            year: 'numeric' 
+                        }),
+                        earnings: 0,
+                        transactions: 0,
+                        totalAmount: 0,
+                        successRate: 0
+                    });
+                    continue;
+                }
+                
+                // Get subscriptions for seller's devices
+                const deviceIds = sellerDevices.map(d => d.device_id);
                 const { data: monthlyData, error } = await supabase
                     .from('subscriptions')
                     .select('*')
-                    .eq('seller_id', sellerId)
-                    .eq('payment_status', 'completed')
+                    .in('device_id', deviceIds)
                     .gte('valid_from', startDate.toISOString().split('T')[0])
                     .lt('valid_from', endDate.toISOString().split('T')[0]);
                 
                 if (error) throw error;
                 
+                // Calculate earnings using dynamic commission rate
                 const monthlyEarnings = monthlyData?.reduce((sum, item) => 
-                    sum + (item.amount * 0.1), 0) || 0; // 10% commission
+                    sum + (item.amount * (commissionRate / 100)), 0) || 0;
                 
                 breakdownData.push({
                     month: date.toLocaleDateString('en-IN', { 
@@ -180,7 +283,12 @@
     }
 
     function processSubscriptionData(subscriptions) {
-        const completedSubs = subscriptions.filter(sub => sub.payment_status === 'completed');
+        // Filter for completed subscriptions only
+        const completedSubs = subscriptions.filter(sub => 
+            sub.payment_status === 'completed' || 
+            sub.payment_status === 'success' ||
+            !sub.payment_status // If no payment_status field, assume completed
+        );
         
         if (completedSubs.length === 0) {
             localChartData = [];
@@ -190,7 +298,7 @@
         // Process plan type distribution
         const planTypeStats = {};
         completedSubs.forEach(sub => {
-            const planType = sub.plan_type || 'unknown';
+            const planType = sub.plan_type || 'basic';
             planTypeStats[planType] = (planTypeStats[planType] || 0) + 1;
         });
         
@@ -433,6 +541,8 @@
 
     async function handleRefresh() {
         if (sellerId) {
+            // Reload commission rate in case it changed
+            await loadCommissionRate();
             await earningsActions.init(sellerId);
             await loadChartData();
             await loadMonthlyBreakdown();
@@ -485,7 +595,7 @@
     <!-- Earnings Overview Section -->
     <div class="earnings-section">
         <div class="section-header">
-            <h3 class="section-title">Seller Earnings ({$earnings.commissionRate}% Commission)</h3>
+            <h3 class="section-title">Seller Earnings ({commissionRate}% Commission)</h3>
             <div class="earnings-filter">
                 <select 
                     class="filter-select" 
@@ -818,6 +928,7 @@
         padding-top: 20px;
         border-top: 1px solid #f1f5f9;
     }
+
 
     .summary-stats {
         display: flex;

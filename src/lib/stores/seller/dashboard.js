@@ -82,7 +82,7 @@ try {
     devicesRecharged: 0,
     totalRechargeAmount: 0,
     rechargeRate: 0,
-    commissionRate: 10,
+    commissionRate: 0,
     recentTransactions: [],
     sellerRating: 0,
     totalSales: 0,

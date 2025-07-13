@@ -2,6 +2,7 @@
     import { onMount, tick } from 'svelte';
     import { supabase } from '$lib/supabase.js';
     import Header from '$lib/components/Header.svelte';
+    import { authStore } from '$lib/stores/auth.js';
     
     // Map and data state
     let map;
@@ -11,6 +12,7 @@
     let selectedGateway = null;
     let loading = true;
     let error = null;
+    let currentSellerId = null;
   
     // Filter states
     let showGateways = true;
@@ -40,16 +42,22 @@
       return deviceStatusFilter === 'online' ? isOnline : !isOnline;
     });
   
-    // Fetch data from Supabase - Updated for new schema
+        // Fetch data from Supabase - Seller-specific queries
     async function fetchGateways() {
       try {
+        if (!currentSellerId) {
+          console.error('No seller ID available');
+          gateways = [];
+          stats.totalGateways = 0;
+          stats.activeGateways = 0;
+          return;
+        }
+
         const { data, error: fetchError } = await supabase
           .from('gateways')
-          .select(`
-            *,
-            seller_profile:seller_profiles!gateways_seller_id_fkey(business_name)
-          `);
-  
+          .select('*')
+          .eq('seller_id', currentSellerId);
+
         if (fetchError) throw fetchError;
         
         gateways = data || [];
@@ -62,16 +70,37 @@
       }
     }
   
-    async function fetchDevices() {
+        async function fetchDevices() {
       try {
+        if (!currentSellerId) {
+          console.error('No seller ID available');
+          devices = [];
+          stats.totalDevices = 0;
+          stats.onlineDevices = 0;
+          return;
+        }
+
+        // First, get all gateway IDs for the current seller
+        const { data: gatewayIds, error: gatewayError } = await supabase
+          .from('gateways')
+          .select('id')
+          .eq('seller_id', currentSellerId);
+
+        if (gatewayError) throw gatewayError;
+
+        if (!gatewayIds || gatewayIds.length === 0) {
+          devices = [];
+          stats.totalDevices = 0;
+          stats.onlineDevices = 0;
+          return;
+        }
+
+        // Then fetch devices that belong to those gateways
         const { data, error: fetchError } = await supabase
           .from('devices')
-          .select(`
-            *,
-            gateway:gateways(name, status),
-            seller_profile:seller_profiles!devices_seller_id_fkey(business_name)
-          `);
-  
+          .select('*')
+          .in('gateway_id', gatewayIds.map(g => g.id));
+
         if (fetchError) throw fetchError;
         
         devices = data || [];
@@ -174,7 +203,6 @@
                   <p><strong>Status:</strong> ${gateway.status}</p>
                   <p><strong>Devices:</strong> ${gateway.current_device_count}/${gateway.max_devices}</p>
                   <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
-                  ${gateway.seller_profile ? `<p><strong>Seller:</strong> ${gateway.seller_profile.business_name}</p>` : ''}
                 </div>
               `)
               .addTo(map);
@@ -228,33 +256,29 @@
               iconAnchor: [6, 6]
             });
   
-            L.marker([lat, lng], { icon: deviceIcon })
-              .bindPopup(`
-                <div class="popup-content">
-                  <h4>${device.device_name || device.device_id}</h4>
-                  <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
-                  <p><strong>Customer:</strong> ${device.customer_name || 'Unknown'}</p>
-                  <p><strong>Gateway:</strong> ${device.gateway?.name || 'Unknown'}</p>
-                  <p><strong>Last Updated:</strong> ${new Date(device.updated_at).toLocaleString()}</p>
-                  ${device.customer_phone ? `<p><strong>Phone:</strong> ${device.customer_phone}</p>` : ''}
-                </div>
-              `)
-              .addTo(map);
+                      L.marker([lat, lng], { icon: deviceIcon })
+            .bindPopup(`
+              <div class="popup-content">
+                <h4>${device.device_name || device.device_id}</h4>
+                <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
+                <p><strong>Customer:</strong> ${device.customer_name || 'Unknown'}</p>
+                <p><strong>Last Updated:</strong> ${new Date(device.updated_at).toLocaleString()}</p>
+                ${device.customer_phone ? `<p><strong>Phone:</strong> ${device.customer_phone}</p>` : ''}
+              </div>
+            `)
+            .addTo(map);
           }
         });
       }
     }
   
-    async function fetchGatewayDevices(gatewayId) {
+        async function fetchGatewayDevices(gatewayId) {
       try {
         const { data, error: fetchError } = await supabase
           .from('devices')
-          .select(`
-            *,
-            seller_profile:seller_profiles!devices_seller_id_fkey(business_name)
-          `)
+          .select('*')
           .eq('gateway_id', gatewayId);
-  
+
         if (fetchError) throw fetchError;
         
         if (selectedGateway) {
@@ -266,6 +290,11 @@
     }
   
     function refreshData() {
+      if (!currentSellerId) {
+        console.warn('Cannot refresh data: no seller ID available');
+        return;
+      }
+
       loading = true;
       error = null;
       Promise.all([fetchGateways(), fetchDevices()])
@@ -297,6 +326,24 @@
   
     onMount(async () => {
       console.log('Map component mounted');
+      
+      // Get current seller ID from auth store
+      try {
+        const result = await authStore.getCurrentUserProfile();
+        if (result.success && result.userType === 'seller') {
+          currentSellerId = result.profile.id;
+          console.log('Seller ID set:', currentSellerId);
+        } else {
+          console.error('No seller profile found');
+          error = 'Authentication required. Please log in as a seller.';
+          return;
+        }
+      } catch (err) {
+        console.error('Error getting seller profile:', err);
+        error = 'Authentication error. Please log in again.';
+        return;
+      }
+      
       // Load Leaflet CSS and JS
       if (typeof window !== 'undefined') {
         console.log('Loading Leaflet resources...');
@@ -337,8 +384,16 @@
   <Header title="Device Map" />
   
   <div class="dashboard-content">
-    <!-- Statistics Cards -->
-    <div class="stats-grid">
+    {#if !currentSellerId}
+      <div class="no-seller-message">
+        <div class="message-card">
+          <h3>Authentication Required</h3>
+          <p>Please log in to view your device map.</p>
+        </div>
+      </div>
+    {:else}
+      <!-- Statistics Cards -->
+      <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-icon">🏢</div>
         <div class="stat-info">
@@ -483,18 +538,6 @@
               </div>
             </div>
           </div>
-  
-          {#if selectedGateway.seller_profile}
-            <div class="info-card">
-              <h4>Seller Information</h4>
-              <div class="info-details">
-                <div class="info-row">
-                  <span>Business:</span>
-                  <span>{selectedGateway.seller_profile.business_name}</span>
-                </div>
-              </div>
-            </div>
-          {/if}
         </div>
   
         <!-- Connected Devices -->
@@ -538,6 +581,7 @@
           </div>
         {/if}
       </div>
+    {/if}
     {/if}
   </div>
   
@@ -614,6 +658,31 @@
       padding: 30px 40px;
       max-width: 1400px;
       margin: 0 auto;
+    }
+
+    .no-seller-message {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 400px;
+    }
+
+    .message-card {
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .message-card h3 {
+      color: #2d3748;
+      margin-bottom: 10px;
+    }
+
+    .message-card p {
+      color: #718096;
     }
   
     .stats-grid {

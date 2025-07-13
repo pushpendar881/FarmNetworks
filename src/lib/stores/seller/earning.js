@@ -2,8 +2,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const supabaseUrl = "https://ptbmahjwwarmkupzqulh.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0Ym1haGp3d2FybWt1cHpxdWxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAzMjQ5MDksImV4cCI6MjA2NTkwMDkwOX0.Osd9yq9kF8E6eYIEOwCYXqIfeBb5nOrNzquF1bJOPXA";
+// const supabaseUrl = "https://ptbmahjwwarmkupzqulh.supabase.co";
+// const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB0Ym1haGp3d2FybWt1cHpxdWxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAzMjQ5MDksImV4cCI6MjA2NTkwMDkwOX0.Osd9yq9kF8E6eYIEOwCYXqIfeBb5nOrNzquF1bJOPXA";
+
+const supabaseUrl = "https://agkfjnktjvyxccfeamtf.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFna2Zqbmt0anZ5eGNjZmVhbXRmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTIyOTY3MTAsImV4cCI6MjA2Nzg3MjcxMH0.vEa3uvjJVZ0Vm8DbYMUS2BVvkpi0bNj2LVi-N0R1RtQ";
+
 const supabase = createClient(supabaseUrl, supabaseKey);
 export const PUBLIC_SUPABASE_URL = supabaseUrl;
 
@@ -38,20 +42,132 @@ export async function getSellerEarnings(sellerId, month = null) {
 
       console.log('Start date:', startDate.toISOString().split('T')[0], 'End date:', endDate.toISOString().split('T')[0]);
       
+      // First get seller's gateways
+      const { data: sellerGateways } = await supabase
+          .from('gateways')
+          .select('id')
+          .eq('seller_id', sellerId);
+          
+      if (!sellerGateways || sellerGateways.length === 0) {
+          return {
+              thisMonth: 0,
+              devicesRecharged: 0,
+              totalRechargeAmount: 0,
+              rechargeRate: 0,
+              commissionRate: 0,
+              recentTransactions: [],
+              subscriptions: []
+          };
+      }
+      
+      // Get devices in seller's gateways
+      const gatewayIds = sellerGateways.map(g => g.id).filter(Boolean);
+      console.log('gatewayIds', gatewayIds);
+      if (!gatewayIds.length) {
+          return {
+              thisMonth: 0,
+              devicesRecharged: 0,
+              totalRechargeAmount: 0,
+              rechargeRate: 0,
+              commissionRate: 0,
+              recentTransactions: [],
+              subscriptions: []
+          };
+      }
+      // const { data: sellerDevices } = await supabase
+      //     .from('devices')
+      //     .select('device_id, device_name, customer_name, customer_phone, customer_email, gateway_id')
+      //     .in('gateway_id', gatewayIds);
+      
+console.log('=== DEBUG GATEWAY IDS ===');
+console.log('sellerGateways:', sellerGateways);
+console.log('gatewayIds:', gatewayIds);
+console.log('gatewayIds length:', gatewayIds.length);
+console.log('gatewayIds types:', gatewayIds.map(id => typeof id));
+
+// Validate and clean the gateway IDs
+const validGatewayIds = gatewayIds.filter(id => {
+  // Check if it's a valid UUID format
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return id && typeof id === 'string' && uuidRegex.test(id);
+});
+
+console.log('validGatewayIds:', validGatewayIds);
+
+if (validGatewayIds.length === 0) {
+  console.error('No valid gateway IDs found');
+  return {
+    thisMonth: 0,
+    devicesRecharged: 0,
+    totalRechargeAmount: 0,
+    rechargeRate: 0,
+    commissionRate: 0,
+    recentTransactions: [],
+    subscriptions: []
+  };
+}
+
+  const { data: sellerDevices, error: devicesError } = await supabase
+  .from('devices')
+  .select('device_id, device_name, gateway_id')
+  .in('gateway_id', validGatewayIds);
+
+console.log('=== DEVICES QUERY RESULT ===');
+console.log('devicesError:', devicesError);
+console.log('sellerDevices:', sellerDevices);
+
+if (devicesError) {
+  console.error('Error fetching devices:', devicesError);
+  throw devicesError;
+}
+          
+      if (!sellerDevices || sellerDevices.length === 0) {
+          return {
+              thisMonth: 0,
+              devicesRecharged: 0,
+              totalRechargeAmount: 0,
+              rechargeRate: 0,
+              commissionRate: 0,
+              recentTransactions: [],
+              subscriptions: []
+          };
+      }
+      
+      // Get subscriptions for seller's devices
+      const deviceIds = sellerDevices.map(d => d.device_id).filter(Boolean);
+      console.log('deviceIds', deviceIds);
+      if (!deviceIds.length) {
+          return {
+              thisMonth: 0,
+              devicesRecharged: 0,
+              totalRechargeAmount: 0,
+              rechargeRate: 0,
+              commissionRate: 0,
+              recentTransactions: [],
+              subscriptions: []
+          };
+      }
       const { data: subscriptions, error } = await supabase
           .from('subscriptions')
           .select('*')
-          .eq('seller_id', sellerId)
-          .eq('payment_status', 'completed')
+          .in('device_id', deviceIds)
           .gte('valid_from', startDate.toISOString().split('T')[0])
           .lt('valid_from', endDate.toISOString().split('T')[0]);
     
           console.log('Subscriptions:', subscriptions);
+    // Get commission rate from commissions table
+    const { data: commissionData } = await supabase
+      .from('commissions')
+      .select('rate')
+      .eq('is_active', true)
+      .maybeSingle();
+    console.log(commissionData)
+    const commissionRate = parseFloat(commissionData?.rate) || 10;
+    console.log(commissionRate)
     // Calculate earnings metrics
     const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
-      // console.log(sub?.commission_amount/100);
       const amount = parseFloat(sub?.amount);
-      return sum + (isNaN(amount) ? 0 : amount * sub?.commission_amount/100);
+      return sum + (isNaN(amount) ? 0 : amount * commissionRate / 100);
     }, 0) || 0;
 
     
@@ -63,18 +179,17 @@ export async function getSellerEarnings(sellerId, month = null) {
     ) || 0;
     console.log('Total recharge amount:', totalRechargeAmount);
     
-    // Get seller profile data
-    const { data: sellerData } = await supabase
-      .from('seller_profiles')
-      .select('commission_rate, total_sales')
-      .eq('id', sellerId)
-      .maybeSingle();
-    
-    const commissionRate = parseFloat(sellerData?.commission_rate) || 10;
     const rechargeRate = devicesRecharged > 0 ? 100 : 0;
+    
+    // Create a map of device data for quick lookup
+    const deviceMap = {};
+    sellerDevices.forEach(device => {
+      deviceMap[device.device_id] = device;
+    });
     
     // Format recent transactions
     const recentTransactions = subscriptions?.slice(0, 10).map(sub => {
+      const deviceData = deviceMap[sub.device_id] || {};
       console.log(sub);
       return {
         date: new Date(sub.valid_from).toLocaleDateString('en-IN', {
@@ -83,11 +198,11 @@ export async function getSellerEarnings(sellerId, month = null) {
           year: 'numeric'
         }),
         deviceId: sub.device_id || 'N/A',
-        deviceName: sub.device_name || 'N/A',
+        deviceName: deviceData.device_name || 'N/A',
         rechargeAmount: parseFloat(sub.amount) || 0,
         commission: parseFloat(sub.commission_amount) || 0,
         status: sub.payment_status === 'completed' ? 'Completed' : 'Pending',
-        customerName: sub.customer_name || 'Unknown',
+        customerName:  'Unknown',
         planName: sub.plan_name || 'Unknown Plan'
       };
     }) || [];
@@ -135,11 +250,61 @@ export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
       const startDate = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0));
       const endDate = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0));
       
-      // Get subscriptions for this month
+      // Get seller's gateways first
+      const { data: sellerGateways } = await supabase
+        .from('gateways')
+        .select('id')
+        .eq('seller_id', sellerId);
+        
+      if (!sellerGateways || sellerGateways.length === 0) {
+        monthlyBreakdown.push({
+          month: targetDate.toLocaleDateString('en-IN', { 
+            month: 'short', 
+            year: '2-digit' 
+          }),
+          fullMonth: targetDate.toLocaleDateString('en-IN', { 
+            month: 'long', 
+            year: 'numeric' 
+          }),
+          earnings: 0,
+          transactions: 0,
+          totalAmount: 0,
+          successRate: 0
+        });
+        continue;
+      }
+      
+      // Get devices in seller's gateways
+      const gatewayIds = sellerGateways.map(g => g.id);
+      const { data: sellerDevices } = await supabase
+        .from('devices')
+        .select('device_id')
+        .in('gateway_id', gatewayIds);
+        
+      if (!sellerDevices || sellerDevices.length === 0) {
+        monthlyBreakdown.push({
+          month: targetDate.toLocaleDateString('en-IN', { 
+            month: 'short', 
+            year: '2-digit' 
+          }),
+          fullMonth: targetDate.toLocaleDateString('en-IN', { 
+            month: 'long', 
+            year: 'numeric' 
+          }),
+          earnings: 0,
+          transactions: 0,
+          totalAmount: 0,
+          successRate: 0
+        });
+        continue;
+      }
+      
+      // Get subscriptions for seller's devices
+      const deviceIds = sellerDevices.map(d => d.device_id);
       const { data: subscriptions, error } = await supabase
         .from('subscriptions')
         .select('amount, commission_amount')
-        .eq('seller_id', sellerId)  // Changed from seller_id to sold_by
+        .in('device_id', deviceIds)
         .eq('payment_status', 'completed')
         .gte('valid_from', startDate.toISOString())
         .lt('valid_from', endDate.toISOString());
@@ -212,11 +377,39 @@ export async function getSubscriptionDistribution(sellerId, month = null) {
     const startDate = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0));
     const endDate = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0));
     
+    // Get seller's gateways first
+    const { data: sellerGateways } = await supabase
+      .from('gateways')
+      .select('id')
+      .eq('seller_id', sellerId);
+      
+    if (!sellerGateways || sellerGateways.length === 0) {
+      return {
+        distribution: {},
+        chartData: []
+      };
+    }
+    
+    // Get devices in seller's gateways
+    const gatewayIds = sellerGateways.map(g => g.id);
+    const { data: sellerDevices } = await supabase
+      .from('devices')
+      .select('device_id')
+      .in('gateway_id', gatewayIds);
+      
+    if (!sellerDevices || sellerDevices.length === 0) {
+      return {
+        distribution: {},
+        chartData: []
+      };
+    }
+    
     // Get subscriptions grouped by plan type
+    const deviceIds = sellerDevices.map(d => d.device_id);
     const { data: subscriptions, error } = await supabase
       .from('subscriptions')
       .select('plan_type, amount, commission_amount')
-      .eq('seller_id', sellerId)  // Changed from seller_id to sold_by
+      .in('device_id', deviceIds)
       .eq('payment_status', 'completed')
       .gte('valid_from', startDate.toISOString())
       .lt('valid_from', endDate.toISOString());
@@ -278,11 +471,33 @@ export async function exportSellerEarnings(sellerId, month = null) {
     const startDate = new Date(Date.UTC(year, monthNum - 1, 1, 0, 0, 0));
     const endDate = new Date(Date.UTC(year, monthNum, 1, 0, 0, 0));
     
+    // Get seller's gateways first
+    const { data: sellerGateways } = await supabase
+      .from('gateways')
+      .select('id')
+      .eq('seller_id', sellerId);
+      
+    if (!sellerGateways || sellerGateways.length === 0) {
+      return 'No data available for export';
+    }
+    
+    // Get devices in seller's gateways
+    const gatewayIds = sellerGateways.map(g => g.id);
+    const { data: sellerDevices } = await supabase
+      .from('devices')
+      .select('device_id, device_name,gateway_id')
+      .in('gateway_id', gatewayIds);
+      
+    if (!sellerDevices || sellerDevices.length === 0) {
+      return 'No data available for export';
+    }
+    
     // Get detailed subscription data for export
+    const deviceIds = sellerDevices.map(d => d.device_id);
     const { data: subscriptions, error } = await supabase
       .from('subscriptions')
       .select('*')
-      .eq('seller_id', sellerId)  // Changed from seller_id to sold_by
+      .in('device_id', deviceIds)
       .eq('payment_status', 'completed')
       .gte('valid_from', startDate.toISOString())
       .lt('valid_until', endDate.toISOString())
@@ -292,21 +507,18 @@ export async function exportSellerEarnings(sellerId, month = null) {
       throw error;
     }
     
-    // Get seller profile for header info - Fixed: get from user_profiles joined with seller_profiles
+    // Get seller profile for header info
     const { data: sellerProfile } = await supabase
       .from('seller_profiles')
-      .select(`
-        business_name,
-        user_profiles!seller_profiles_id_fkey (
-          email,
-          full_name,
-          phone
-        )
-      `)
+      .select('business_name')
       .eq('id', sellerId)
       .single();
-    
-    const userProfile = sellerProfile?.user_profiles || {};
+      
+    const { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('email, full_name, phone')
+      .eq('id', sellerId)
+      .single();
     
     // Generate CSV content
     const csvHeaders = [
@@ -325,14 +537,21 @@ export async function exportSellerEarnings(sellerId, month = null) {
       'Valid Until'
     ];
     
+    // Create a map of device data for quick lookup
+    const deviceMap = {};
+    sellerDevices.forEach(device => {
+      deviceMap[device.device_id] = device;
+    });
+    
     const csvRows = subscriptions?.map(sub => {
+      const deviceData = deviceMap[sub.device_id] || {};
       return [
         new Date(sub.valid_from).toLocaleDateString('en-IN'),
         sub.device_id || 'N/A',
-        sub.device_name || 'N/A',
-        sub.customer_name || 'Unknown',
-        sub.customer_phone || 'N/A',
-        sub.customer_email || 'N/A',
+        deviceData.device_name || 'N/A',
+        'Unknown',
+        'N/A',
+         'N/A',
         sub.plan_name || 'Unknown Plan',
         sub.plan_type || 'Unknown',
         parseFloat(sub.amount) || 0,
