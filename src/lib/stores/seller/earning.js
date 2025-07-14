@@ -156,21 +156,36 @@ if (devicesError) {
     
           console.log('Subscriptions:', subscriptions);
     // Get commission rate from commissions table
+    // const { data: commissionData } = await supabase
+    //   .from('commissions')
+    //   .select('rate')
+    //   .eq('is_active', true)
+    //   .maybeSingle();
+    // console.log(commissionData)
+    // const commissionRate = parseFloat(commissionData?.rate) || 10;
+    // console.log(commissionRate)
+    // // Calculate earnings metrics
+    // const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
+    //   const amount = parseFloat(sub?.amount);
+    //   return sum + (isNaN(amount) ? 0 : amount * commissionRate / 100);
+    // }, 0) || 0;
+
+    
+    // Calculate earnings using stored commission_rate from each subscription
+    const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
+      const amount = parseFloat(sub?.amount) || 0;
+      const commissionRate = parseFloat(sub?.commission_rate) || 0;
+      return sum + (amount * commissionRate / 100);
+    }, 0) || 0;
+
+    // Get current commission rate for display purposes only
     const { data: commissionData } = await supabase
       .from('commissions')
       .select('rate')
       .eq('is_active', true)
       .maybeSingle();
-    console.log(commissionData)
-    const commissionRate = parseFloat(commissionData?.rate) || 10;
-    console.log(commissionRate)
-    // Calculate earnings metrics
-    const thisMonthEarnings = subscriptions?.reduce((sum, sub) => {
-      const amount = parseFloat(sub?.amount);
-      return sum + (isNaN(amount) ? 0 : amount * commissionRate / 100);
-    }, 0) || 0;
 
-    
+    const currentCommissionRate = parseFloat(commissionData?.rate) || 10;
     console.log('This month earnings:', thisMonthEarnings);
     const devicesRecharged = subscriptions?.length || 0;
     
@@ -200,7 +215,8 @@ if (devicesError) {
         deviceId: sub.device_id || 'N/A',
         deviceName: deviceData.device_name || 'N/A',
         rechargeAmount: parseFloat(sub.amount) || 0,
-        commission: parseFloat(sub.commission_amount) || 0,
+        // commission: parseFloat(sub.commission_amount) || 0,
+        commission: parseFloat(sub.amount) * parseFloat(sub.commission_rate) / 100 || 0,
         status: sub.payment_status === 'completed' ? 'Completed' : 'Pending',
         customerName:  'Unknown',
         planName: sub.plan_name || 'Unknown Plan'
@@ -212,11 +228,28 @@ if (devicesError) {
       devicesRecharged,
       totalRechargeAmount: Math.round(totalRechargeAmount),
       rechargeRate,
-      commissionRate,
+      commissionRate: currentCommissionRate, // Current rate for display
       recentTransactions,
       subscriptions: subscriptions || []
     };
-    
+
+    // Fetch payment status for this seller and month
+    let paymentStatus = 'pending';
+    const { data: earningRow, error: earningRowError } = await supabase
+      .from('seller_earnings')
+      .select('payment_status')
+      .eq('seller_id', sellerId)
+      .eq('month_year', `${year}-${String(monthNum).padStart(2, '0')}`)
+      .maybeSingle();
+
+    if (earningRowError) {
+      console.warn('Error fetching payment status:', earningRowError);
+    }
+    if (earningRow && earningRow.payment_status) {
+      paymentStatus = earningRow.payment_status;
+    }
+    result.paymentStatus = paymentStatus;
+
     console.log('Final earnings result:', result);
     return result;
     
@@ -224,6 +257,22 @@ if (devicesError) {
     console.error('Error in getSellerEarnings:', error);
     throw error;
   }
+}
+
+/**
+ * Mark seller earnings as claimed (set payment_status to 'completed')
+ * @param {string} sellerId
+ * @param {string} monthYear - 'YYYY-MM'
+ */
+export async function claimSellerCommission(sellerId, monthYear) {
+  const { error } = await supabase
+    .from('seller_earnings')
+    .update({ payment_status: 'completed' })
+    .eq('seller_id', sellerId)
+    .eq('month_year', monthYear);
+
+  if (error) throw error;
+  return true;
 }
 
 /**
@@ -305,7 +354,6 @@ export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
         .from('subscriptions')
         .select('amount, commission_amount')
         .in('device_id', deviceIds)
-        .eq('payment_status', 'completed')
         .gte('valid_from', startDate.toISOString())
         .lt('valid_from', endDate.toISOString());
       
@@ -328,9 +376,14 @@ export async function getSellerEarningsSummary(sellerId, monthsBack = 6) {
         continue;
       }
       
-      const earnings = subscriptions?.reduce((sum, sub) => 
-        sum + (parseFloat(sub.commission_amount) || 0), 0
-      ) || 0;
+      // const earnings = subscriptions?.reduce((sum, sub) => 
+      //   sum + (parseFloat(sub.commission_amount) || 0), 0
+      // ) || 0;
+      const earnings = subscriptions?.reduce((sum, sub) => {
+        const amount = parseFloat(sub.amount) || 0;
+        const commissionRate = parseFloat(sub.commission_rate) || 0;
+        return sum + (amount * commissionRate / 100);
+      }, 0) || 0;
       
       const totalAmount = subscriptions?.reduce((sum, sub) => 
         sum + (parseFloat(sub.amount) || 0), 0
@@ -410,7 +463,7 @@ export async function getSubscriptionDistribution(sellerId, month = null) {
       .from('subscriptions')
       .select('plan_type, amount, commission_amount')
       .in('device_id', deviceIds)
-      .eq('payment_status', 'completed')
+      // .eq('payment_status', 'completed')
       .gte('valid_from', startDate.toISOString())
       .lt('valid_from', endDate.toISOString());
     
@@ -431,7 +484,11 @@ export async function getSubscriptionDistribution(sellerId, month = null) {
       }
       distribution[planType].count++;
       distribution[planType].totalAmount += parseFloat(sub.amount) || 0;
-      distribution[planType].totalCommission += parseFloat(sub.commission_amount) || 0;
+      // 
+      // distribution[planType].totalCommission += parseFloat(sub.commission_amount) || 0;
+      const amount = parseFloat(sub.amount) || 0;
+      const commissionRate = parseFloat(sub.commission_rate) || 0;
+      distribution[planType].totalCommission += (amount * commissionRate / 100);
     });
     
     // Convert to array format for charts - matching the expected format
@@ -498,7 +555,7 @@ export async function exportSellerEarnings(sellerId, month = null) {
       .from('subscriptions')
       .select('*')
       .in('device_id', deviceIds)
-      .eq('payment_status', 'completed')
+      // .eq('payment_status', 'completed')
       .gte('valid_from', startDate.toISOString())
       .lt('valid_until', endDate.toISOString())
       .order('valid_from', { ascending: false });
@@ -555,18 +612,23 @@ export async function exportSellerEarnings(sellerId, month = null) {
         sub.plan_name || 'Unknown Plan',
         sub.plan_type || 'Unknown',
         parseFloat(sub.amount) || 0,
-        parseFloat(sub.commission_amount) || 0,
-        sub.payment_status || 'Unknown',
+        // parseFloat(sub.commission_amount) || 0,
+        parseFloat(sub.amount) * parseFloat(sub.commission_rate) / 100 || 0,
+        'completed',
         new Date(sub.valid_from).toLocaleDateString('en-IN'),
         new Date(sub.valid_until).toLocaleDateString('en-IN')
       ];
     }) || [];
     
     // Calculate summary
-    const totalEarnings = subscriptions?.reduce((sum, sub) => 
-      sum + (parseFloat(sub.commission_amount) || 0), 0
-    ) || 0;
-    
+    // const totalEarnings = subscriptions?.reduce((sum, sub) => 
+    //   sum + (parseFloat(sub.commission_amount) || 0), 0
+    // ) || 0;
+    const totalEarnings = subscriptions?.reduce((sum, sub) => {
+      const amount = parseFloat(sub.amount) || 0;
+      const commissionRate = parseFloat(sub.commission_rate) || 0;
+      return sum + (amount * commissionRate / 100);
+    }, 0) || 0;
     const totalRechargeAmount = subscriptions?.reduce((sum, sub) => 
       sum + (parseFloat(sub.amount) || 0), 0
     ) || 0;

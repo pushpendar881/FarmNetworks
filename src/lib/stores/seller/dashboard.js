@@ -4,7 +4,8 @@ import {
   getSellerEarnings, 
   getSellerEarningsSummary,
   getSubscriptionDistribution,
-  exportSellerEarnings
+  exportSellerEarnings,
+  claimSellerCommission
 } from './earning.js';
 
 // Core stores
@@ -158,6 +159,24 @@ try {
   cleanup() {
     currentSellerId.set(null);
     error.set(null);
+  },
+
+  // Add claimCommission action
+  async claimCommission(monthYear) {
+    const sellerId = get(currentSellerId);
+    if (!sellerId) {
+      error.set('No seller selected');
+      return;
+    }
+    isLoading.set(true);
+    try {
+      await claimSellerCommission(sellerId, monthYear);
+      await this.init(sellerId); // Refresh data
+    } catch (err) {
+      error.set('Failed to claim commission: ' + err.message);
+    } finally {
+      isLoading.set(false);
+    }
   }
 };
 

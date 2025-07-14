@@ -18,7 +18,7 @@
     let sellerId = null;
     let selectedMonthValue = new Date().toISOString().slice(0, 7);
     let monthOptions = [];
-    let commissionRate = 10; // Default fallback rate
+    let currentCommissionRate = 10; // Current commission rate for display
     
     // Chart variables
     let subscriptionChart = null;
@@ -28,6 +28,8 @@
     let localChartData = [];
     let subscriptionChartContainer;
     let monthlyChartContainer;
+
+    let isClaiming = false;
 
     onMount(async () => {
         await initializeComponent();
@@ -44,8 +46,8 @@
             sellerId = seller?.profile?.id;
             
             if (sellerId) {
-                // Load commission rate first
-                await loadCommissionRate();
+                // Load current commission rate for display
+                await loadCurrentCommissionRate();
                 
                 // Generate month options
                 monthOptions = generateMonthOptions();
@@ -67,7 +69,7 @@
         }
     }
 
-    async function loadCommissionRate() {
+    async function loadCurrentCommissionRate() {
         try {
             const { data: commissionData, error: commissionError } = await supabase
                 .from('commissions')
@@ -77,17 +79,15 @@
             
             if (commissionError) {
                 console.error('Error loading commission rate:', commissionError);
-                // Keep default rate of 10
                 return;
             }
             
             if (commissionData) {
-                commissionRate = commissionData.rate;
-                console.log('Loaded commission rate:', commissionRate);
+                currentCommissionRate = commissionData.rate;
+                console.log('Loaded current commission rate:', currentCommissionRate);
             }
         } catch (err) {
             console.error('Error fetching commission rate:', err);
-            // Keep default rate of 10
         }
     }
 
@@ -142,11 +142,11 @@
                 return;
             }
             
-            // Get subscriptions for seller's devices
+            // Get subscriptions for seller's devices with stored commission rates
             const deviceIds = sellerDevices.map(d => d.device_id);
             const { data: subscriptions, error } = await supabase
                 .from('subscriptions')
-                .select('*')
+                .select('*, commission_rate')
                 .in('device_id', deviceIds)
                 .gte('valid_from', startDate.toISOString().split('T')[0])
                 .lt('valid_from', endDate.toISOString().split('T')[0]);
@@ -238,20 +238,23 @@
                     continue;
                 }
                 
-                // Get subscriptions for seller's devices
+                // Get subscriptions for seller's devices with stored commission rates
                 const deviceIds = sellerDevices.map(d => d.device_id);
                 const { data: monthlyData, error } = await supabase
                     .from('subscriptions')
-                    .select('*')
+                    .select('*, commission_rate')
                     .in('device_id', deviceIds)
                     .gte('valid_from', startDate.toISOString().split('T')[0])
                     .lt('valid_from', endDate.toISOString().split('T')[0]);
                 
                 if (error) throw error;
                 
-                // Calculate earnings using dynamic commission rate
-                const monthlyEarnings = monthlyData?.reduce((sum, item) => 
-                    sum + (item.amount * (commissionRate / 100)), 0) || 0;
+                // Calculate earnings using stored commission rates from each transaction
+                const monthlyEarnings = monthlyData?.reduce((sum, item) => {
+                    // Use stored commission rate if available, otherwise use current rate as fallback
+                    const commissionRate = item.commission_rate || currentCommissionRate;
+                    return sum + (item.amount * (commissionRate / 100));
+                }, 0) || 0;
                 
                 breakdownData.push({
                     month: date.toLocaleDateString('en-IN', { 
@@ -541,11 +544,44 @@
 
     async function handleRefresh() {
         if (sellerId) {
-            // Reload commission rate in case it changed
-            await loadCommissionRate();
+            // Reload current commission rate in case it changed
+            await loadCurrentCommissionRate();
             await earningsActions.init(sellerId);
             await loadChartData();
             await loadMonthlyBreakdown();
+        }
+    }
+
+    async function claimCommission() {
+        isClaiming = true;
+        await earningsActions.claimCommission(selectedMonthValue);
+        await handleRefresh(); // Refresh data after claim
+        isClaiming = false;
+    }
+
+    // Function to ensure all new subscriptions store commission rate
+    async function ensureCommissionRateStored() {
+        try {
+            // Get current commission rate
+            const { data: commissionData } = await supabase
+                .from('commissions')
+                .select('rate')
+                .eq('is_active', true)
+                .single();
+                
+            if (commissionData) {
+                // Update subscriptions that don't have commission_rate stored
+                const { error } = await supabase
+                    .from('subscriptions')
+                    .update({ commission_rate: commissionData.rate })
+                    .is('commission_rate', null);
+                    
+                if (error) {
+                    console.error('Error updating commission rates:', error);
+                }
+            }
+        } catch (err) {
+            console.error('Error ensuring commission rate storage:', err);
         }
     }
 
@@ -556,6 +592,69 @@
             style: 'currency',
             currency: 'INR'
         }).format(amount);
+    }
+
+    // Function to get aggregated earnings for current month
+    async function getAggregatedEarnings() {
+        if (!sellerId) return;
+        
+        try {
+            const [year, month] = selectedMonthValue.split('-').map(Number);
+            const startDate = new Date(year, month - 1, 1);
+            const endDate = new Date(year, month, 1);
+            
+            // Get seller's gateways
+            const { data: sellerGateways } = await supabase
+                .from('gateways')
+                .select('id')
+                .eq('seller_id', sellerId);
+                
+            if (!sellerGateways || sellerGateways.length === 0) {
+                return { earnings: 0, transactions: 0, totalAmount: 0 };
+            }
+            
+            // Get devices in seller's gateways
+            const gatewayIds = sellerGateways.map(g => g.id);
+            const { data: sellerDevices } = await supabase
+                .from('devices')
+                .select('device_id')
+                .in('gateway_id', gatewayIds);
+                
+            if (!sellerDevices || sellerDevices.length === 0) {
+                return { earnings: 0, transactions: 0, totalAmount: 0 };
+            }
+            
+            // Get subscriptions with stored commission rates
+            const deviceIds = sellerDevices.map(d => d.device_id);
+            const { data: subscriptions } = await supabase
+                .from('subscriptions')
+                .select('amount, commission_rate')
+                .in('device_id', deviceIds)
+                .gte('valid_from', startDate.toISOString().split('T')[0])
+                .lt('valid_from', endDate.toISOString().split('T')[0]);
+                
+            if (!subscriptions || subscriptions.length === 0) {
+                return { earnings: 0, transactions: 0, totalAmount: 0 };
+            }
+            
+            // Calculate earnings using stored commission rates
+            const earnings = subscriptions.reduce((sum, sub) => {
+                const rate = sub.commission_rate || currentCommissionRate;
+                return sum + (sub.amount * (rate / 100));
+            }, 0);
+            
+            const totalAmount = subscriptions.reduce((sum, sub) => sum + sub.amount, 0);
+            
+            return {
+                earnings,
+                transactions: subscriptions.length,
+                totalAmount
+            };
+            
+        } catch (err) {
+            console.error('Error getting aggregated earnings:', err);
+            return { earnings: 0, transactions: 0, totalAmount: 0 };
+        }
     }
 
     // Reactive statement to sync with store
@@ -572,6 +671,11 @@
             renderMonthlyBreakdownChart();
         }, 100);
     }
+
+    // Initialize commission rate storage for existing subscriptions on mount
+    onMount(() => {
+        ensureCommissionRateStored();
+    });
 </script>
 
 <svelte:head>
@@ -595,7 +699,7 @@
     <!-- Earnings Overview Section -->
     <div class="earnings-section">
         <div class="section-header">
-            <h3 class="section-title">Seller Earnings ({commissionRate}% Commission)</h3>
+            <h3 class="section-title">Seller Earnings (Current Rate: {currentCommissionRate}%)</h3>
             <div class="earnings-filter">
                 <select 
                     class="filter-select" 
@@ -639,6 +743,14 @@
                 <div class="earnings-card">
                     <div class="earnings-amount">{formatCurrency($earnings.thisMonth)}</div>
                     <div class="earnings-label">This Month Earnings</div>
+                    <div class="earnings-note">*Based on historical commission rates</div>
+                    <!-- Optionally, show status here -->
+                    <div class="payment-status">
+                        Status: 
+                        <span class={ $earnings.paymentStatus === 'completed' ? 'status-completed' : 'status-pending' }>
+                            { $earnings.paymentStatus }
+                        </span>
+                    </div>
                 </div>
                 <div class="earnings-card">
                     <div class="earnings-amount">{$earnings.devicesRecharged}</div>
@@ -652,6 +764,13 @@
                     <div class="earnings-amount">{$earnings.rechargeRate}%</div>
                     <div class="earnings-label">Success Rate</div>
                 </div>
+                {#if $earnings.paymentStatus === 'pending'}
+                    <div class="earnings-card claim-card">
+                        <button class="claim-btn" on:click={claimCommission} disabled={isClaiming}>
+                            {isClaiming ? 'Claiming...' : 'Claim Commission'}
+                        </button>
+                    </div>
+                {/if}
             </div>
         {/if}
     </div>
@@ -706,7 +825,7 @@
             <div class="chart-header-content">
                 <div class="chart-title-container">
                     <h3 class="section-title">Monthly Breakdown (Last 6 Months)</h3>
-                    <div class="info-icon" title="Shows earnings and transaction trends over the last 6 months">ℹ️</div>
+                    <div class="info-icon" title="Shows earnings and transaction trends over the last 6 months using historical commission rates">ℹ️</div>
                 </div>
             </div>
         </div>
@@ -884,6 +1003,66 @@
         color: #718096;
         font-size: 14px;
         font-weight: 500;
+    }
+
+    .payment-status {
+        font-size: 14px;
+        color: #718096;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+
+    .status-completed {
+        color: #22543d;
+        background-color: #c6f6d5;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .status-pending {
+        color: #742a2a;
+        background-color: #fed7d7;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .claim-btn {
+        background: #4299e1;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        font-size: 14px;
+    }
+
+    .claim-btn:hover:not(:disabled) {
+        background: #3182ce;
+        transform: translateY(-1px);
+    }
+
+    .claim-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .claim-btn-container {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 16px;
+        margin-bottom: 24px;
+    }
+
+    .claim-card {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f0f4ff;
     }
 
     .chart-header-content {

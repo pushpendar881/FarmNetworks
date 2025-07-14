@@ -1,0 +1,1153 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.app_user_profile (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  name text,
+  phone numeric,
+  user_id uuid NOT NULL UNIQUE,
+  CONSTRAINT app_user_profile_pkey PRIMARY KEY (id),
+  CONSTRAINT app_user_profile_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.commissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  rate numeric NOT NULL DEFAULT 10.00 CHECK (rate >= 0::numeric AND rate <= 100::numeric),
+  is_active boolean DEFAULT true UNIQUE,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT commissions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.devices (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  device_id text NOT NULL UNIQUE,
+  device_name text,
+  device_type text DEFAULT 'motor_controller'::text,
+  farm_name text,
+  runtime integer DEFAULT 0,
+  user_id uuid NOT NULL,
+  gateway_id uuid NOT NULL,
+  installation_date timestamp with time zone,
+  motor_status smallint DEFAULT 0,
+  error_status smallint DEFAULT 0,
+  latitude numeric CHECK (latitude >= '-90'::integer::numeric AND latitude <= 90::numeric),
+  longitude numeric CHECK (longitude >= '-180'::integer::numeric AND longitude <= 180::numeric),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  last_updated timestamp with time zone DEFAULT now(),
+  location text,
+  CONSTRAINT devices_pkey PRIMARY KEY (id),
+  CONSTRAINT devices_user_id_fkey1 FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT devices_gateway_id_fkey FOREIGN KEY (gateway_id) REFERENCES public.gateways(id)
+);
+CREATE TABLE public.gateways (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  status text DEFAULT 'active'::text CHECK (status = ANY (ARRAY['active'::text, 'inactive'::text, 'maintenance'::text])),
+  seller_id uuid NOT NULL,
+  max_devices integer DEFAULT 100,
+  current_device_count integer DEFAULT 0,
+  latitude numeric CHECK (latitude >= '-90'::integer::numeric AND latitude <= 90::numeric),
+  longitude numeric CHECK (longitude >= '-180'::integer::numeric AND longitude <= 180::numeric),
+  coverage_radius bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT gateways_pkey PRIMARY KEY (id),
+  CONSTRAINT gateways_seller_id_fkey FOREIGN KEY (seller_id) REFERENCES public.seller_profiles(id)
+);
+CREATE TABLE public.seller_profiles (
+  id uuid NOT NULL,
+  business_name text NOT NULL,
+  business_type text,
+  address text,
+  city text,
+  state text,
+  pincode text,
+  gstin text,
+  total_sales numeric DEFAULT 0.00,
+  is_approved boolean DEFAULT false,
+  approved_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT seller_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT seller_profiles_id_fkey FOREIGN KEY (id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.subscriptions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  device_id text NOT NULL,
+  order_id text,
+  recharge_date timestamp with time zone DEFAULT now(),
+  plan_name text NOT NULL,
+  plan_type text DEFAULT 'basic'::text CHECK (plan_type = ANY (ARRAY['basic'::text, 'premium'::text, 'enterprise'::text])),
+  amount numeric NOT NULL,
+  currency text DEFAULT 'INR'::text,
+  valid_from timestamp with time zone DEFAULT now(),
+  valid_until timestamp with time zone NOT NULL,
+  transaction_id text UNIQUE,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT subscriptions_user_id_fkey1 FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT subscriptions_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.devices(device_id)
+);
+CREATE TABLE public.user_profiles (
+  id uuid NOT NULL,
+  email text NOT NULL UNIQUE,
+  full_name text NOT NULL,
+  phone text,
+  username text UNIQUE,
+  role text NOT NULL CHECK (role = ANY (ARRAY['admin'::text, 'seller'::text, 'user'::text])),
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+
+
+
+
+BEGIN
+    RETURN (
+        SELECT role 
+        FROM public.user_profiles 
+        WHERE id = user_id
+    );
+END;
+
+
+
+BEGIN
+    RETURN (SELECT role FROM public.user_profiles WHERE id = user_id);
+END;
+
+
+
+DECLARE
+    user_role text;
+BEGIN
+    -- Get role from metadata, default to 'user'
+    user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'user');
+
+    -- Validate role
+    IF user_role NOT IN ('admin', 'seller', 'user') THEN
+        user_role := 'user';
+    END IF;
+
+    -- Insert user profile (avoid duplicates)
+    INSERT INTO public.user_profiles (
+        id, email, full_name, phone, username, role
+    )
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+        COALESCE(NEW.raw_user_meta_data->>'phone', ''),
+        COALESCE(NEW.raw_user_meta_data->>'username', ''),
+        user_role
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    -- Insert seller profile only if role is seller
+    IF user_role = 'seller' THEN
+        INSERT INTO public.seller_profiles (
+            id,
+            business_name,
+            business_type,
+            address,
+            city,
+            state,
+            pincode,
+            gstin
+        )
+        VALUES (
+            NEW.id,
+            COALESCE(NEW.raw_user_meta_data->>'business_name', 'Business'),
+            COALESCE(NEW.raw_user_meta_data->>'business_type', ''),
+            COALESCE(NEW.raw_user_meta_data->>'address', ''),
+            COALESCE(NEW.raw_user_meta_data->>'city', ''),
+            COALESCE(NEW.raw_user_meta_data->>'state', ''),
+            COALESCE(NEW.raw_user_meta_data->>'pincode', ''),
+            COALESCE(NEW.raw_user_meta_data->>'gstin', '')
+        )
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE LOG 'Error in handle_new_user for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
+END;
+
+
+
+DECLARE
+    result text := 'Unified Schema setup test results:' || chr(10);
+BEGIN
+    -- Test table existence
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_profiles') THEN
+        result := result || '✓ user_profiles table exists' || chr(10);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'seller_profiles') THEN
+        result := result || '✓ seller_profiles table exists' || chr(10);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'devices') THEN
+        result := result || '✓ devices table exists' || chr(10);
+    END IF;
+    
+    -- Test views
+    IF EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'user_dashboard') THEN
+        result := result || '✓ user_dashboard view exists' || chr(10);
+    END IF;
+    
+    result := result || chr(10) || 'Unified schema supports:' || chr(10);
+    result := result || '• Web portal (Admin + Sellers)' || chr(10);
+    result := result || '• Mobile app (Users)' || chr(10);
+    result := result || '• Shared device management' || chr(10);
+    result := result || '• Unified subscription system' || chr(10);
+    
+    RETURN result;
+END;
+
+
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+
+Schema	Table	Name	
+public
+
+app_user_profile
+
+app_user_profile_pkey
+
+
+View definition
+
+public
+
+app_user_profile
+
+app_user_profile_user_id_key
+
+
+View definition
+
+public
+
+commissions
+
+commissions_pkey
+
+
+View definition
+
+public
+
+commissions
+
+commissions_unique_active
+
+
+View definition
+
+public
+
+devices
+
+devices_device_id_key
+
+
+View definition
+
+public
+
+devices
+
+devices_pkey
+
+
+View definition
+
+public
+
+gateways
+
+gateways_pkey
+
+
+View definition
+
+public
+
+devices
+
+idx_devices_device_id
+
+
+View definition
+
+public
+
+devices
+
+idx_devices_gateway_id
+
+
+View definition
+
+public
+
+devices
+
+idx_devices_user_id
+
+
+View definition
+
+public
+
+gateways
+
+idx_gateways_seller_id
+
+
+View definition
+
+public
+
+subscriptions
+
+idx_subscriptions_device_id
+
+
+View definition
+
+public
+
+subscriptions
+
+idx_subscriptions_user_id
+
+
+View definition
+
+public
+
+user_profiles
+
+idx_user_profiles_email
+
+
+View definition
+
+public
+
+user_profiles
+
+idx_user_profiles_username
+
+
+View definition
+
+public
+
+seller_profiles
+
+seller_profiles_pkey
+
+
+View definition
+
+public
+
+subscriptions
+
+subscriptions_pkey
+
+
+View definition
+
+public
+
+subscriptions
+
+subscriptions_transaction_id_key
+
+
+View definition
+
+public
+
+user_profiles
+
+user_profiles_email_key
+
+
+View definition
+
+public
+
+user_profiles
+
+user_profiles_pkey
+
+
+View definition
+
+public
+
+user_profiles
+
+user_profiles_username_key
+
+
+View definition
+
+
+CREATE INDEX idx_user_profiles_email ON public.user_profiles(email);
+CREATE INDEX idx_user_profiles_role ON public.user_profiles(role);
+CREATE INDEX idx_user_profiles_username ON public.user_profiles(username);
+CREATE INDEX idx_seller_profiles_approved ON public.seller_profiles(is_approved);
+CREATE INDEX idx_gateways_seller_id ON public.gateways(seller_id);
+CREATE INDEX idx_devices_seller_id ON public.devices(seller_id);
+CREATE INDEX idx_devices_user_id ON public.devices(user_id);
+CREATE INDEX idx_devices_gateway_id ON public.devices(gateway_id);
+CREATE INDEX idx_devices_device_id ON public.devices(device_id);
+CREATE INDEX idx_subscriptions_seller_id ON public.subscriptions(seller_id);
+CREATE INDEX idx_subscriptions_user_id ON public.subscriptions(user_id);
+CREATE INDEX idx_subscriptions_device_id ON public.subscriptions(device_id);
+CREATE INDEX idx_subscriptions_payment_status ON public.subscriptions(payment_status);
+
+
+-- 15TfPHki5cOMBBcP
+
+-- ===============================
+-- UNIFIED DUAL PORTAL SCHEMA - WEB + APP
+-- Admin + Sellers + App Users - NO INFINITE RECURSION
+-- ===============================
+
+-- First, clean up existing schema
+DROP TABLE IF EXISTS public.subscriptions CASCADE;
+DROP TABLE IF EXISTS public.devices CASCADE;
+DROP TABLE IF EXISTS public.gateways CASCADE;
+DROP TABLE IF EXISTS public.seller_profiles CASCADE;
+DROP TABLE IF EXISTS public.user_profiles CASCADE;
+DROP VIEW IF EXISTS public.subscription_details CASCADE;
+DROP VIEW IF EXISTS public.seller_dashboard CASCADE;
+DROP VIEW IF EXISTS public.admin_dashboard CASCADE;
+
+-- Drop existing triggers and functions
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+DROP FUNCTION IF EXISTS update_updated_at_column();
+DROP FUNCTION IF EXISTS public.get_user_role(uuid);
+
+-- ===============================
+-- HELPER FUNCTIONS (SECURITY DEFINER)
+-- ===============================
+
+-- Function to get user role without RLS interference
+CREATE OR REPLACE FUNCTION public.get_user_role(user_id uuid)
+RETURNS text AS $$
+BEGIN
+    RETURN (
+        SELECT role 
+        FROM public.user_profiles 
+        WHERE id = user_id
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ===============================
+-- CORE TABLES
+-- ===============================
+
+-- 1. User Profiles (Support admin, seller, user roles)
+CREATE TABLE public.user_profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email text NOT NULL UNIQUE,
+  full_name text NOT NULL,
+  phone text,
+  username text UNIQUE, -- For app users
+  role text NOT NULL CHECK (role IN ('admin', 'seller', 'user')),
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+-- 2. Seller Profiles (Only for sellers - web functionality)
+CREATE TABLE public.seller_profiles (
+  id uuid PRIMARY KEY REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  business_name text NOT NULL,
+  business_type text,
+  address text,
+  city text,
+  state text,
+  pincode text,
+  gstin text,
+  commission_rate decimal(5,2) DEFAULT 10.00,
+  total_sales decimal(12,2) DEFAULT 0.00,
+  is_approved boolean DEFAULT false,
+  approved_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+-- 3. Gateways (Enhanced for both web and app)
+CREATE TABLE public.gateways (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  location text,
+  status text DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')),
+  seller_id uuid REFERENCES public.seller_profiles(id) ON DELETE SET NULL,
+  max_devices integer DEFAULT 100,
+  current_device_count integer DEFAULT 0,
+  latitude numeric CHECK (latitude >= -90 AND latitude <= 90),
+  longitude numeric CHECK (longitude >= -180 AND longitude <= 180),
+  coverage_radius bigint,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+-- 4. Devices (Unified for both web and app)
+CREATE TABLE public.devices (
+  -- Primary identifiers
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  device_id text NOT NULL UNIQUE,
+  device_name text NOT NULL,
+  device_type text DEFAULT 'motor_controller',
+  
+  -- App-specific fields
+  farm_name text,
+  runtime integer DEFAULT 0,
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE, -- App user who owns device
+  
+  -- Web-specific fields
+  gateway_id uuid NOT NULL REFERENCES public.gateways(id) ON DELETE CASCADE,
+  seller_id uuid REFERENCES public.seller_profiles(id) ON DELETE SET NULL,
+  customer_name text,
+  customer_phone text,
+  customer_email text,
+  installation_date timestamp with time zone,
+  warranty_until timestamp with time zone,
+  
+  -- Device status (shared)
+  motor_status smallint DEFAULT 0,
+  error_status smallint DEFAULT 0,
+  
+  -- Location (shared)
+  location text,
+  latitude numeric CHECK (latitude >= -90 AND latitude <= 90),
+  longitude numeric CHECK (longitude >= -180 AND longitude <= 180),
+  
+  -- Timestamps
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  last_updated timestamp with time zone DEFAULT now()
+);
+
+-- 5. Subscriptions (Unified for both web and app)
+CREATE TABLE public.subscriptions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  device_id uuid NOT NULL REFERENCES public.devices(id) ON DELETE CASCADE,
+  
+  -- Web fields
+  seller_id uuid REFERENCES public.seller_profiles(id) ON DELETE SET NULL,
+  commission_amount decimal(10,2),
+  
+  -- App fields  
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  order_id text,
+  recharge_date timestamp with time zone DEFAULT now(),
+  
+  -- Shared fields
+  plan_name text NOT NULL,
+  plan_type text DEFAULT 'basic' CHECK (plan_type IN ('basic', 'premium', 'enterprise')),
+  amount decimal(10,2) NOT NULL,
+  currency text DEFAULT 'INR',
+  valid_from timestamp with time zone DEFAULT now(),
+  valid_until timestamp with time zone NOT NULL,
+  transaction_id text UNIQUE,
+  payment_status text DEFAULT 'pending' CHECK (payment_status IN ('pending', 'completed', 'failed', 'refunded')),
+  
+  -- Timestamps
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+-- ===============================
+-- TRIGGER FUNCTIONS
+-- ===============================
+
+-- Update timestamp function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- User creation trigger function (FIXED VERSION)
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    user_role text;
+BEGIN
+    -- Get role from metadata, default to 'user' for app users
+    user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'user');
+    
+    -- Validate role
+    IF user_role NOT IN ('admin', 'seller', 'user') THEN
+        user_role := 'user';
+    END IF;
+    
+    -- Create user profile
+    INSERT INTO public.user_profiles (
+        id, 
+        email, 
+        full_name, 
+        phone,
+        username,
+        role
+    ) VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+        COALESCE(NEW.raw_user_meta_data->>'phone', ''),
+        COALESCE(NEW.raw_user_meta_data->>'username', ''),
+        user_role
+    );
+
+    -- Create seller profile only if role is seller
+    IF user_role = 'seller' THEN
+        INSERT INTO public.seller_profiles (
+            id,
+            business_name,
+            business_type,
+            address,
+            city,
+            state,
+            pincode,
+            gstin
+        ) VALUES (
+            NEW.id,
+            COALESCE(NEW.raw_user_meta_data->>'business_name', 'Business'),
+            COALESCE(NEW.raw_user_meta_data->>'business_type', ''),
+            COALESCE(NEW.raw_user_meta_data->>'address', ''),
+            COALESCE(NEW.raw_user_meta_data->>'city', ''),
+            COALESCE(NEW.raw_user_meta_data->>'state', ''),
+            COALESCE(NEW.raw_user_meta_data->>'pincode', ''),
+            COALESCE(NEW.raw_user_meta_data->>'gstin', '')
+        );
+    END IF;
+
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE LOG 'Error in handle_new_user for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ===============================
+-- TRIGGERS
+-- ===============================
+
+-- User creation trigger
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
+-- Update timestamp triggers
+CREATE TRIGGER update_user_profiles_updated_at 
+    BEFORE UPDATE ON public.user_profiles 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_seller_profiles_updated_at 
+    BEFORE UPDATE ON public.seller_profiles 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_gateways_updated_at 
+    BEFORE UPDATE ON public.gateways 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_devices_updated_at 
+    BEFORE UPDATE ON public.devices 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_subscriptions_updated_at 
+    BEFORE UPDATE ON public.subscriptions 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ===============================
+-- ENABLE ROW LEVEL SECURITY
+-- ===============================
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.seller_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gateways ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.devices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+-- ===============================
+-- ROW LEVEL SECURITY POLICIES (FIXED - NO RECURSION)
+-- ===============================
+
+-- User Profiles Policies
+CREATE POLICY "Allow anonymous signups" ON public.user_profiles
+    FOR INSERT TO anon
+    WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated signups" ON public.user_profiles
+    FOR INSERT TO authenticated
+    WITH CHECK (true);
+
+CREATE POLICY "Users can view profiles" ON public.user_profiles
+    FOR SELECT 
+    USING (
+        id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+    );
+
+CREATE POLICY "Users can update own profile" ON public.user_profiles
+    FOR UPDATE 
+    USING (id = auth.uid())
+    WITH CHECK (id = auth.uid());
+
+-- Seller Profiles Policies
+CREATE POLICY "Allow seller signups" ON public.seller_profiles
+    FOR INSERT TO anon, authenticated
+    WITH CHECK (true);
+
+CREATE POLICY "Sellers can view profiles" ON public.seller_profiles
+    FOR SELECT 
+    USING (
+        id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+    );
+
+CREATE POLICY "Sellers can update profiles" ON public.seller_profiles
+    FOR UPDATE 
+    USING (
+        id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+    );
+
+-- Gateways Policies
+CREATE POLICY "Gateway access policy" ON public.gateways
+    FOR ALL 
+    USING (
+        EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+        OR seller_id = auth.uid()
+    );
+
+-- Devices Policies
+CREATE POLICY "Device access policy" ON public.devices
+    FOR ALL 
+    USING (
+        EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+        OR seller_id = auth.uid()
+        OR user_id = auth.uid()  -- App users can access their own devices
+    );
+
+-- Subscriptions Policies
+CREATE POLICY "Subscription access policy" ON public.subscriptions
+    FOR ALL 
+    USING (
+        EXISTS (
+            SELECT 1 FROM auth.users au 
+            WHERE au.id = auth.uid() 
+            AND au.raw_user_meta_data->>'role' = 'admin'
+        )
+        OR seller_id = auth.uid()
+        OR user_id = auth.uid()  -- App users can access their own subscriptions
+    );
+
+-- ===============================
+-- PERMISSIONS
+-- ===============================
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON public.user_profiles TO anon, authenticated;
+GRANT ALL ON public.seller_profiles TO anon, authenticated;
+GRANT ALL ON public.gateways TO anon, authenticated;
+GRANT ALL ON public.devices TO anon, authenticated;
+GRANT ALL ON public.subscriptions TO anon, authenticated;
+
+-- Grant execute on the helper function
+GRANT EXECUTE ON FUNCTION public.get_user_role(uuid) TO anon, authenticated;
+
+-- ===============================
+-- USEFUL VIEWS
+-- ===============================
+
+-- Complete seller dashboard view
+CREATE VIEW public.seller_dashboard AS
+SELECT 
+    up.id,
+    up.email,
+    up.full_name,
+    up.phone,
+    up.is_active,
+    sp.business_name,
+    sp.business_type,
+    sp.address,
+    sp.city,
+    sp.state,
+    sp.pincode,
+    sp.gstin,
+    sp.commission_rate,
+    sp.total_sales,
+    sp.is_approved,
+    sp.approved_at,
+    (SELECT COUNT(*) FROM public.gateways WHERE seller_id = up.id) as gateway_count,
+    (SELECT COUNT(*) FROM public.devices WHERE seller_id = up.id) as device_count,
+    (SELECT COUNT(*) FROM public.subscriptions WHERE seller_id = up.id) as subscription_count,
+    up.created_at,
+    sp.updated_at
+FROM public.user_profiles up
+JOIN public.seller_profiles sp ON up.id = sp.id
+WHERE up.role = 'seller';
+
+-- Admin dashboard view
+CREATE VIEW public.admin_dashboard AS
+SELECT 
+    (SELECT COUNT(*) FROM public.user_profiles WHERE role = 'seller') as total_sellers,
+    (SELECT COUNT(*) FROM public.user_profiles WHERE role = 'user') as total_app_users,
+    (SELECT COUNT(*) FROM public.seller_profiles WHERE is_approved = true) as approved_sellers,
+    (SELECT COUNT(*) FROM public.seller_profiles WHERE is_approved = false) as pending_sellers,
+    (SELECT COUNT(*) FROM public.gateways) as total_gateways,
+    (SELECT COUNT(*) FROM public.devices) as total_devices,
+    (SELECT COUNT(*) FROM public.subscriptions) as total_subscriptions,
+    (SELECT COALESCE(SUM(amount), 0) FROM public.subscriptions WHERE payment_status = 'completed') as total_revenue,
+    (SELECT COALESCE(SUM(commission_amount), 0) FROM public.subscriptions WHERE payment_status = 'completed') as total_commission,
+    now() as generated_at;
+
+-- App user dashboard view
+CREATE VIEW public.user_dashboard AS
+SELECT 
+    up.id,
+    up.email,
+    up.full_name,
+    up.phone,
+    up.username,
+    (SELECT COUNT(*) FROM public.devices WHERE user_id = up.id) as device_count,
+    (SELECT COUNT(*) FROM public.subscriptions WHERE user_id = up.id) as subscription_count,
+    (SELECT COUNT(*) FROM public.subscriptions WHERE user_id = up.id AND payment_status = 'completed') as active_subscriptions,
+    up.created_at,
+    up.updated_at
+FROM public.user_profiles up
+WHERE up.role = 'user';
+
+-- Grant permissions on views
+GRANT SELECT ON public.seller_dashboard TO authenticated;
+GRANT SELECT ON public.admin_dashboard TO authenticated;
+GRANT SELECT ON public.user_dashboard TO authenticated;
+
+-- ===============================
+-- INDEXES FOR PERFORMANCE
+-- ===============================
+
+CREATE INDEX idx_user_profiles_email ON public.user_profiles(email);
+CREATE INDEX idx_user_profiles_role ON public.user_profiles(role);
+CREATE INDEX idx_user_profiles_username ON public.user_profiles(username);
+CREATE INDEX idx_seller_profiles_approved ON public.seller_profiles(is_approved);
+CREATE INDEX idx_gateways_seller_id ON public.gateways(seller_id);
+CREATE INDEX idx_devices_seller_id ON public.devices(seller_id);
+CREATE INDEX idx_devices_user_id ON public.devices(user_id);
+CREATE INDEX idx_devices_gateway_id ON public.devices(gateway_id);
+CREATE INDEX idx_devices_device_id ON public.devices(device_id);
+CREATE INDEX idx_subscriptions_seller_id ON public.subscriptions(seller_id);
+CREATE INDEX idx_subscriptions_user_id ON public.subscriptions(user_id);
+CREATE INDEX idx_subscriptions_device_id ON public.subscriptions(device_id);
+CREATE INDEX idx_subscriptions_payment_status ON public.subscriptions(payment_status);
+
+-- ===============================
+-- TESTING FUNCTION
+-- ===============================
+
+CREATE OR REPLACE FUNCTION test_unified_schema_setup()
+RETURNS text AS $$
+DECLARE
+    result text := 'Unified Schema setup test results:' || chr(10);
+BEGIN
+    -- Test table existence
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_profiles') THEN
+        result := result || '✓ user_profiles table exists' || chr(10);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'seller_profiles') THEN
+        result := result || '✓ seller_profiles table exists' || chr(10);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'devices') THEN
+        result := result || '✓ devices table exists' || chr(10);
+    END IF;
+    
+    -- Test views
+    IF EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'user_dashboard') THEN
+        result := result || '✓ user_dashboard view exists' || chr(10);
+    END IF;
+    
+    result := result || chr(10) || 'Unified schema supports:' || chr(10);
+    result := result || '• Web portal (Admin + Sellers)' || chr(10);
+    result := result || '• Mobile app (Users)' || chr(10);
+    result := result || '• Shared device management' || chr(10);
+    result := result || '• Unified subscription system' || chr(10);
+    
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Run the test
+SELECT test_unified_schema_setup();
+
+CREATE TABLE public.commissions (
+ id uuid NOT NULL DEFAULT gen_random_uuid(),
+ rate numeric NOT NULL DEFAULT 10.00 CHECK (rate >= 0 AND rate <= 100),
+ is_active boolean DEFAULT true,
+ created_at timestamp with time zone DEFAULT now(),
+ updated_at timestamp with time zone DEFAULT now(),
+ CONSTRAINT commissions_pkey PRIMARY KEY (id),
+ CONSTRAINT commissions_unique_active UNIQUE (is_active) DEFERRABLE INITIALLY DEFERRED
+);
+
+-- Complete Database Schema Fix
+-- Run this entire query to fix all schema issues
+
+BEGIN;
+
+-- 1. Remove commission_rate from seller_profiles if it exists (it should come from commissions table)
+-- No need to add commission_rate to seller_profiles - it's managed in commissions table
+
+-- 2. Add seller_id column to subscriptions table
+ALTER TABLE public.subscriptions 
+ADD COLUMN IF NOT EXISTS seller_id uuid;
+
+-- 3. Add foreign key constraint for seller_id in subscriptions
+ALTER TABLE public.subscriptions 
+ADD CONSTRAINT subscriptions_seller_id_fkey 
+FOREIGN KEY (seller_id) REFERENCES public.seller_profiles(id);
+
+-- 4. Add direct seller_id to devices table (if your frontend expects it)
+ALTER TABLE public.devices 
+ADD COLUMN IF NOT EXISTS seller_id uuid;
+
+-- 5. Add foreign key constraint for seller_id in devices
+ALTER TABLE public.devices 
+ADD CONSTRAINT devices_seller_id_fkey 
+FOREIGN KEY (seller_id) REFERENCES public.seller_profiles(id);
+
+-- 6. Update existing subscriptions with seller_id from device's gateway
+UPDATE public.subscriptions 
+SET seller_id = (
+    SELECT g.seller_id 
+    FROM public.devices d 
+    JOIN public.gateways g ON d.gateway_id = g.id 
+    WHERE d.device_id = subscriptions.device_id
+)
+WHERE seller_id IS NULL;
+
+-- 7. Update existing devices with seller_id from their gateway
+UPDATE public.devices 
+SET seller_id = (
+    SELECT g.seller_id 
+    FROM public.gateways g 
+    WHERE g.id = devices.gateway_id
+)
+WHERE seller_id IS NULL;
+
+-- 8. Create performance indexes
+CREATE INDEX IF NOT EXISTS idx_subscriptions_seller_id ON public.subscriptions(seller_id);
+CREATE INDEX IF NOT EXISTS idx_devices_seller_id ON public.devices(seller_id);
+CREATE INDEX IF NOT EXISTS idx_devices_user_gateway ON public.devices(user_id, gateway_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_validity ON public.subscriptions(valid_from, valid_until);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON public.subscriptions(device_id, valid_until) WHERE valid_until > now();
+
+-- 9. Function to auto-populate seller_id in subscriptions
+CREATE OR REPLACE FUNCTION auto_populate_seller_id()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Get seller_id from device's gateway if not provided
+    IF NEW.seller_id IS NULL THEN
+        SELECT g.seller_id INTO NEW.seller_id
+        FROM public.devices d 
+        JOIN public.gateways g ON d.gateway_id = g.id 
+        WHERE d.device_id = NEW.device_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 10. Create trigger for auto-populating seller_id
+DROP TRIGGER IF EXISTS subscription_seller_id_trigger ON public.subscriptions;
+CREATE TRIGGER subscription_seller_id_trigger
+    BEFORE INSERT ON public.subscriptions
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_populate_seller_id();
+
+-- 11. Function to auto-populate seller_id in devices
+CREATE OR REPLACE FUNCTION auto_populate_device_seller_id()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Get seller_id from gateway if not provided
+    IF NEW.seller_id IS NULL THEN
+        SELECT g.seller_id INTO NEW.seller_id
+        FROM public.gateways g 
+        WHERE g.id = NEW.gateway_id;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 12. Create trigger for auto-populating device seller_id
+DROP TRIGGER IF EXISTS device_seller_id_trigger ON public.devices;
+CREATE TRIGGER device_seller_id_trigger
+    BEFORE INSERT ON public.devices
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_populate_device_seller_id();
+
+-- 13. Fix commissions table - remove UNIQUE constraint on is_active to allow multiple inactive records
+ALTER TABLE public.commissions 
+DROP CONSTRAINT IF EXISTS commissions_is_active_key;
+
+-- Add partial unique index to ensure only one active commission rate
+CREATE UNIQUE INDEX IF NOT EXISTS commissions_active_unique 
+ON public.commissions (is_active) 
+WHERE is_active = true;
+
+-- 14. Update gateway device counts (in case they're out of sync)
+UPDATE public.gateways 
+SET current_device_count = (
+    SELECT COUNT(*) 
+    FROM public.devices 
+    WHERE gateway_id = gateways.id
+);
+
+-- 15. Function to get current active commission rate
+CREATE OR REPLACE FUNCTION get_current_commission_rate()
+RETURNS numeric AS $
+DECLARE
+    current_rate numeric;
+BEGIN
+    SELECT rate INTO current_rate
+    FROM public.commissions 
+    WHERE is_active = true
+    LIMIT 1;
+    
+    -- Return default rate if no active commission found
+    RETURN COALESCE(current_rate, 10.00);
+END;
+$ LANGUAGE plpgsql;
+
+-- 16. Function to calculate commission for a subscription
+CREATE OR REPLACE FUNCTION calculate_subscription_commission(subscription_amount numeric)
+RETURNS numeric AS $
+BEGIN
+    RETURN subscription_amount * get_current_commission_rate() / 100;
+END;
+$ LANGUAGE plpgsql;
+
+-- 17. Create view for seller revenue with commission calculations
+CREATE OR REPLACE VIEW seller_revenue_summary AS
+SELECT 
+    sp.id as seller_id,
+    sp.business_name,
+    COUNT(s.id) as total_subscriptions,
+    SUM(s.amount) as total_revenue,
+    SUM(calculate_subscription_commission(s.amount)) as total_commission_earned,
+    SUM(s.amount) - SUM(calculate_subscription_commission(s.amount)) as net_revenue
+FROM public.seller_profiles sp
+LEFT JOIN public.subscriptions s ON sp.id = s.seller_id
+GROUP BY sp.id, sp.business_name;
+
+COMMIT;
+
+-- Verify the changes
+SELECT 'Schema update completed successfully' as status;    
+
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    user_role text;
+BEGIN
+    -- Get role from metadata, default to 'user'
+    user_role := COALESCE(NEW.raw_user_meta_data->>'role', 'user');
+
+    -- Validate role
+    IF user_role NOT IN ('admin', 'seller', 'user') THEN
+        user_role := 'user';
+    END IF;
+
+    -- Insert user profile (avoid duplicates)
+    INSERT INTO public.user_profiles (
+        id, email, full_name, phone, username, role
+    )
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+        COALESCE(NEW.raw_user_meta_data->>'phone', ''),
+        COALESCE(NEW.raw_user_meta_data->>'username', ''),
+        user_role
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    -- Insert seller profile only if role is seller
+    IF user_role = 'seller' THEN
+        INSERT INTO public.seller_profiles (
+            id,
+            business_name,
+            business_type,
+            address,
+            city,
+            state,
+            pincode,
+            gstin
+        )
+        VALUES (
+            NEW.id,
+            COALESCE(NEW.raw_user_meta_data->>'business_name', 'Business'),
+            COALESCE(NEW.raw_user_meta_data->>'business_type', ''),
+            COALESCE(NEW.raw_user_meta_data->>'address', ''),
+            COALESCE(NEW.raw_user_meta_data->>'city', ''),
+            COALESCE(NEW.raw_user_meta_data->>'state', ''),
+            COALESCE(NEW.raw_user_meta_data->>'pincode', ''),
+            COALESCE(NEW.raw_user_meta_data->>'gstin', '')
+        )
+        ON CONFLICT (id) DO NOTHING;
+    END IF;
+
+    RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+    RAISE LOG 'Error in handle_new_user for user %: %', NEW.id, SQLERRM;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
