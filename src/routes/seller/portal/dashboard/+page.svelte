@@ -258,7 +258,7 @@
         // Get device count by each gateway/master
         const { data: gateways } = await supabase
             .from('gateways')
-            .select('name, current_device_count, status')
+            .select('name, status')
             .eq('seller_id', sellerProfile.id);
         
         devicesByMaster = gateways || [];
@@ -282,7 +282,7 @@
         // Get devices with issues
         const { data: problemDevices } = await supabase
             .from('devices')
-            .select('device_id, device_name, gateway_id, motor_status, error_status, last_updated')
+            .select('device_id, device_name, gateway_id, motor_status, error_status, last_updated,created_at')
             .in('gateway_id', gatewayIds)
             .or('motor_status.eq.0,error_status.neq.0')
             .order('last_updated', { ascending: false })

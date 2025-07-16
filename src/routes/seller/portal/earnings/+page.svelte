@@ -760,10 +760,10 @@
                     <div class="earnings-amount">{formatCurrency($earnings.totalRechargeAmount)}</div>
                     <div class="earnings-label">Total Recharge Amount</div>
                 </div>
-                <div class="earnings-card">
+                <!-- <div class="earnings-card">
                     <div class="earnings-amount">{$earnings.rechargeRate}%</div>
                     <div class="earnings-label">Success Rate</div>
-                </div>
+                </div> -->
                 {#if $earnings.paymentStatus === 'pending'}
                     <div class="earnings-card claim-card">
                         <button class="claim-btn" on:click={claimCommission} disabled={isClaiming}>
@@ -856,7 +856,6 @@
                             <th>Earnings</th>
                             <th>Transactions</th>
                             <th>Total Amount</th>
-                            <th>Success Rate</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -866,11 +865,6 @@
                                 <td>{formatCurrency(breakdown.earnings)}</td>
                                 <td>{breakdown.transactions}</td>
                                 <td>{formatCurrency(breakdown.totalAmount)}</td>
-                                <td>
-                                    <span class="success-rate">
-                                        {breakdown.successRate}%
-                                    </span>
-                                </td>
                             </tr>
                         {/each}
                     </tbody>

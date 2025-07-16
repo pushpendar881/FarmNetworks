@@ -18,10 +18,10 @@
             <span class="info-label">Recharge Date:</span>
             <span class="info-value">{node.rechargeDate}</span>
         </div>
-        <div class="info-item">
+        <!-- <div class="info-item">
             <span class="info-label">Expiry Date:</span>
             <span class="info-value">{node.expiryDate}</span>
-        </div>
+        </div> -->
         <div class="info-item">
             <span class="info-label">Install Date:</span>
             <span class="info-value">{node.installDate}</span>

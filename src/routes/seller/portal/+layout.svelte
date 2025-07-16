@@ -2,12 +2,10 @@
     import Sidebar from '$lib/components/Sidebar.svelte';
 </script>
 
-<div class="container">
-    <Sidebar />
-    <main class="main-content">
-        <slot />
-    </main>
-</div>
+<Sidebar />
+<main class="main-content">
+    <slot />
+</main>
 
 <style>
     :global(body) {
@@ -23,22 +21,19 @@
         box-sizing: border-box;
     }
 
-    .container {
-        display: flex;
-        min-height: 100vh;
-    }
+    /* Remove flex container */
 
     .main-content {
-        flex: 1;
         margin-left: 280px;
         min-height: 100vh;
-        padding: 32px 24px; /* Optional: for inner spacing */
-        background: #fff;   /* Solid white background */
+        padding: 32px 24px;
+        background: #fff;
     }
 
     @media (max-width: 768px) {
         .main-content {
             margin-left: 70px;
+            padding: 32px 8px;
         }
     }
 </style>

@@ -86,7 +86,7 @@
                         coverage_radius: formData.coverageRadius,
                         seller_id: sellerProfile.id,
                         status: 'active',
-                        current_device_count: 0
+                        
                     }
                 ])
                 .select()
@@ -237,7 +237,7 @@
                 </div>
 
                 <!-- Configuration -->
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label for="maxDevices">Max Devices</label>
                     <input
                         id="maxDevices"
@@ -251,7 +251,7 @@
                     {#if formErrors.maxDevices}
                         <span class="field-error">{formErrors.maxDevices}</span>
                     {/if}
-                </div>
+                </div> -->
 
                 <div class="form-group">
                     <label for="coverageRadius">Coverage Radius (meters)</label>

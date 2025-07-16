@@ -201,7 +201,6 @@
                 <div class="popup-content">
                   <h4>${gateway.name}</h4>
                   <p><strong>Status:</strong> ${gateway.status}</p>
-                  <p><strong>Devices:</strong> ${gateway.current_device_count}/${gateway.max_devices}</p>
                   <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
                 </div>
               `)
@@ -533,8 +532,8 @@
                 <span>{selectedGateway.coverage_radius}m radius</span>
               </div>
               <div class="info-row">
-                <span>Capacity:</span>
-                <span>{selectedGateway.current_device_count}/{selectedGateway.max_devices} devices</span>
+                <!-- <span>Capacity:</span>
+                <span>{selectedGateway.current_device_count}/{selectedGateway.max_devices} devices</span> -->
               </div>
             </div>
           </div>

@@ -100,7 +100,7 @@ export async function loadMastersData(sellerId = null) {
                 latitude,
                 longitude,
                 max_devices,
-                current_device_count,
+               
                 created_at
             `);
         
@@ -189,7 +189,7 @@ export async function loadMastersData(sellerId = null) {
                 year: 'numeric'
             }),
             maxDevices: gateway.max_devices,
-            currentDeviceCount: gateway.current_device_count,
+            // currentDeviceCount: gateway.current_device_count,
             nodes: gateway.devices.map(device => {
                 // Get device's subscriptions using the renamed map
                 const deviceSubs = deviceSubscriptionsMap[device.device_id] || [];
@@ -204,11 +204,8 @@ export async function loadMastersData(sellerId = null) {
                     rechargeDate: latestSubscription 
                         ? new Date(latestSubscription.valid_from).toLocaleDateString('en-GB')
                         : 'Not recharged',
-                    expiryDate: latestSubscription 
-                        ? new Date(latestSubscription.valid_until).toLocaleDateString('en-GB')
-                        : 'No active plan',
-                    installDate: device.installation_date 
-                        ? new Date(device.installation_date).toLocaleDateString('en-GB')
+                    installDate: device.created_at 
+                        ? new Date(device.created_at).toLocaleDateString('en-GB')
                         : 'Not set',
                     deviceType: device.device_type,
                     hasError: device.error_status !== 0,

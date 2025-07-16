@@ -8,6 +8,7 @@
     let password = '';
     let confirmPassword = '';
     let isSubmitting = false;
+    
     let isSuccess = false;
   
     // Check if user has a valid session for password reset
