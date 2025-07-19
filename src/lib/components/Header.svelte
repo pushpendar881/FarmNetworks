@@ -18,12 +18,12 @@
     <div class="header-top">
         <h1 class="page-title">{title}</h1>
         <div class="user-profile">
-            <button class="notifications" on:click={showNotifications}>
+            <!-- <button class="notifications" on:click={showNotifications}>
                 🔔
                 {#if $user.notifications > 0}
                     <span class="notification-badge">{$user.notifications}</span>
                 {/if}
-            </button>
+            </button> -->
             <button class="user-avatar" on:click={navigateToProfile} title="Go to Profile">
                 {$user.initials}
             </button>

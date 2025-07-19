@@ -128,6 +128,7 @@ export async function loadMastersData(sellerId = null) {
                         motor_status,
                         error_status,
                         installation_date,
+                        created_at,
                         last_updated
                     `)
                     .eq('gateway_id', gateway.id);
@@ -192,6 +193,7 @@ export async function loadMastersData(sellerId = null) {
             // currentDeviceCount: gateway.current_device_count,
             nodes: gateway.devices.map(device => {
                 // Get device's subscriptions using the renamed map
+                // console.log(device)
                 const deviceSubs = deviceSubscriptionsMap[device.device_id] || [];
                 const latestSubscription = deviceSubs
                     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
