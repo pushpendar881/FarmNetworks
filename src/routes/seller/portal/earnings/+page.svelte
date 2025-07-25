@@ -15,6 +15,7 @@
     import { supabase } from '$lib/supabase.js';
 
     // Main state variables
+    let activeChartSeries = 'earnings'; 
     let sellerId = null;
     let selectedMonthValue = new Date().toISOString().slice(0, 7);
     let monthOptions = [];
@@ -411,105 +412,117 @@
     }
 
     function renderMonthlyBreakdownChart() {
-        const chartElement = monthlyChartContainer;
-        if (!chartElement || !$monthlyBreakdown.length) {
-            return;
-        }
-        
-        if (!window.ApexCharts) {
-            console.error('ApexCharts not loaded');
-            return;
-        }
-        
-        // Destroy existing chart
-        if (monthlyBreakdownChart) {
-            monthlyBreakdownChart.destroy();
-            monthlyBreakdownChart = null;
-        }
-        
-        // LINE CHART for monthly earnings
-        const chartOptions = {
-            series: [{
-                name: "Earnings",
-                data: $monthlyBreakdown.map(d => d.earnings)
-            }, {
-                name: "Transactions",
-                data: $monthlyBreakdown.map(d => d.transactions)
-            }],
-            colors: ["#16BDCA", "#1C64F2"],
-            chart: {
-                type: "line",
-                height: 350,
-                fontFamily: "Inter, sans-serif"
-            },
-            xaxis: {
-                categories: $monthlyBreakdown.map(d => d.month),
-                labels: {
-                    style: {
-                        fontFamily: "Inter, sans-serif"
-                    }
-                }
-            },
-            yaxis: [
-                {
-                    title: {
-                        text: 'Earnings (₹)',
-                        style: {
-                            fontFamily: "Inter, sans-serif"
-                        }
-                    },
-                    labels: {
-                        formatter: function(val) {
-                            return '₹' + val.toFixed(0);
-                        }
-                    }
-                },
-                {
-                    opposite: true,
-                    title: {
-                        text: 'Transactions',
-                        style: {
-                            fontFamily: "Inter, sans-serif"
-                        }
-                    }
-                }
-            ],
-            stroke: {
-                curve: "smooth",
-                width: 3
-            },
-            dataLabels: {
-                enabled: false
-            },
-            legend: {
-                position: "top",
-                fontFamily: "Inter, sans-serif",
-                fontSize: "14px"
-            },
-            tooltip: {
-                shared: true,
-                intersect: false,
-                y: [{
-                    formatter: function(value) {
-                        return '₹' + value.toFixed(2);
-                    }
-                }, {
-                    formatter: function(value) {
-                        return value + " transactions";
-                    }
-                }]
-            }
-        };
-        
-        try {
-            monthlyBreakdownChart = new ApexCharts(chartElement, chartOptions);
-            monthlyBreakdownChart.render();
-            console.log('Monthly breakdown chart rendered successfully');
-        } catch (error) {
-            console.error('Error rendering monthly breakdown chart:', error);
-        }
+    const chartElement = monthlyChartContainer;
+    if (!chartElement || !$monthlyBreakdown.length) {
+        return;
     }
+    
+    if (!window.ApexCharts) {
+        console.error('ApexCharts not loaded');
+        return;
+    }
+    
+    // Destroy existing chart
+    if (monthlyBreakdownChart) {
+        monthlyBreakdownChart.destroy();
+        monthlyBreakdownChart = null;
+    }
+    
+    // Determine which data to show based on active series
+    const seriesData = activeChartSeries === 'earnings' 
+        ? $monthlyBreakdown.map(d => d.earnings)
+        : $monthlyBreakdown.map(d => d.transactions);
+    
+    const seriesName = activeChartSeries === 'earnings' ? 'Earnings' : 'Transactions';
+    const color = activeChartSeries === 'earnings' ? '#16BDCA' : '#1C64F2';
+    
+    // LINE CHART for selected series
+    const chartOptions = {
+        series: [{
+            name: seriesName,
+            data: seriesData
+        }],
+        colors: [color],
+        chart: {
+            type: "line",
+            height: 350,
+            fontFamily: "Inter, sans-serif"
+        },
+        xaxis: {
+            categories: $monthlyBreakdown.map(d => d.month),
+            labels: {
+                style: {
+                    fontFamily: "Inter, sans-serif"
+                }
+            }
+        },
+        yaxis: {
+            title: {
+                text: activeChartSeries === 'earnings' ? 'Earnings (₹)' : 'Transactions',
+                style: {
+                    fontFamily: "Inter, sans-serif"
+                }
+            },
+            labels: {
+                formatter: function(val) {
+                    return activeChartSeries === 'earnings' 
+                        ? '₹' + val.toFixed(0) 
+                        : Math.round(val).toString();
+                }
+            }
+        },
+        stroke: {
+            curve: "smooth",
+            width: 3
+        },
+        dataLabels: {
+            enabled: false
+        },
+        legend: {
+            show: false // Hide default legend since we'll use custom buttons
+        },
+        tooltip: {
+            y: {
+                formatter: function(value) {
+                    return activeChartSeries === 'earnings' 
+                        ? '₹' + value.toFixed(2)
+                        : value + " transactions";
+                }
+            }
+        },
+        grid: {
+            borderColor: '#f1f5f9',
+            strokeDashArray: 4
+        },
+        markers: {
+            size: 6,
+            colors: [color],
+            strokeColors: '#fff',
+            strokeWidth: 2,
+            hover: {
+                size: 8
+            }
+        }
+    };
+    
+    try {
+        monthlyBreakdownChart = new ApexCharts(chartElement, chartOptions);
+        monthlyBreakdownChart.render();
+        console.log('Monthly breakdown chart rendered successfully for:', activeChartSeries);
+    } catch (error) {
+        console.error('Error rendering monthly breakdown chart:', error);
+    }
+}
 
+function toggleChartSeries(series) {
+    if (activeChartSeries !== series) {
+        activeChartSeries = series;
+        // Re-render chart with new series
+        setTimeout(() => {
+            renderMonthlyBreakdownChart();
+        }, 100);
+    }
+}
     function destroyCharts() {
         if (subscriptionChart) {
             subscriptionChart.destroy();
@@ -665,12 +678,15 @@
         }, 100);
     }
 
-    $: if ($monthlyBreakdown.length > 0 && monthlyChartContainer) {
-        // Small delay to ensure DOM is ready
-        setTimeout(() => {
-            renderMonthlyBreakdownChart();
-        }, 100);
-    }
+  // Add this reactive statement to your existing reactive statements section
+// Replace the existing reactive statement for monthly breakdown chart
+
+$: if ($monthlyBreakdown.length > 0 && monthlyChartContainer && activeChartSeries) {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+        renderMonthlyBreakdownChart();
+    }, 100);
+}
 
     // Initialize commission rate storage for existing subscriptions on mount
     onMount(() => {
@@ -820,7 +836,7 @@
     </div>
 
     <!-- Monthly Breakdown Section -->
-    <div class="earnings-section">
+    <!-- <div class="earnings-section">
         <div class="section-header">
             <div class="chart-header-content">
                 <div class="chart-title-container">
@@ -871,8 +887,80 @@
                 </table>
             </div>
         {/if}
+    </div> -->
+<!-- Replace your Monthly Breakdown Section with this updated version -->
+<div class="earnings-section">
+    <div class="section-header">
+        <div class="chart-header-content">
+            <div class="chart-title-container">
+                <h3 class="section-title">Monthly Breakdown (Last 6 Months)</h3>
+                <div class="info-icon" title="Shows earnings and transaction trends over the last 6 months using historical commission rates">ℹ️</div>
+            </div>
+            
+            <!-- Custom Legend/Toggle Buttons -->
+            <div class="chart-toggle-buttons">
+                <button 
+                    class="toggle-btn {activeChartSeries === 'earnings' ? 'active' : ''}"
+                    on:click={() => toggleChartSeries('earnings')}
+                >
+                    <span class="toggle-indicator earnings-indicator"></span>
+                    Earnings
+                </button>
+                <button 
+                    class="toggle-btn {activeChartSeries === 'transactions' ? 'active' : ''}"
+                    on:click={() => toggleChartSeries('transactions')}
+                >
+                    <span class="toggle-indicator transactions-indicator"></span>
+                    Transactions
+                </button>
+            </div>
+        </div>
     </div>
+    
+    {#if $isLoading}
+        <div class="chart-loading">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Loading monthly breakdown...</p>
+            </div>
+        </div>
+    {:else if $monthlyBreakdown.length === 0}
+        <div class="empty-chart">
+            <div class="empty-icon">📈</div>
+            <h4>No monthly data</h4>
+            <p>No earnings data found for the last 6 months.</p>
+        </div>
+    {:else}
+        <div class="chart-container">
+            <div id="monthly-breakdown-chart" bind:this={monthlyChartContainer}></div>
+        </div>
+        
+        <div class="monthly-breakdown-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th>Earnings</th>
+                        <th>Transactions</th>
+                        <th>Total Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each $monthlyBreakdown as breakdown}
+                        <tr>
+                            <td>{breakdown.fullMonth}</td>
+                            <td>{formatCurrency(breakdown.earnings)}</td>
+                            <td>{breakdown.transactions}</td>
+                            <td>{formatCurrency(breakdown.totalAmount)}</td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+    {/if}
 </div>
+</div>
+
 
 <style>
     .dashboard-content {
@@ -880,7 +968,101 @@
         max-width: 1200px;
         margin: 0 auto;
     }
+/* Add these styles to your existing <style> section */
 
+    .chart-toggle-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+}
+
+.toggle-btn:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e0;
+}
+
+.toggle-btn.active {
+    background: white;
+    border-color: #667eea;
+    color: #4a5568;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.toggle-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.earnings-indicator {
+    background: #16BDCA;
+}
+
+.transactions-indicator {
+    background: #1C64F2;
+}
+
+.toggle-btn:not(.active) .toggle-indicator {
+    opacity: 0.5;
+}
+
+/* Update chart-header-content for better responsiveness */
+.chart-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 20px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .chart-header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .chart-toggle-buttons {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .toggle-btn {
+        flex: 1;
+        justify-content: center;
+        padding: 10px 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chart-toggle-buttons {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .toggle-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
     .earnings-section {
         background: white;
         padding: 25px;
@@ -1354,4 +1536,4 @@
             }
         }
 
-</style>
+</style>    

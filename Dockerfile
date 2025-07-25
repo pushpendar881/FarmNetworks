@@ -41,9 +41,9 @@ RUN chown -R sveltekit:nodejs /app
 
 USER sveltekit
 
-EXPOSE 3000
+EXPOSE 5173
 
-ENV PORT=3000
+ENV PORT=5173
 ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "build"] 

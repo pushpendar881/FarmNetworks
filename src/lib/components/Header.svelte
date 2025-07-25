@@ -47,7 +47,7 @@
     }
 
     .page-title {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 700;
         color: #2d3748;
         margin: 0;
@@ -59,7 +59,7 @@
         gap: 15px;
     }
 
-    .notifications {
+    /* .notifications {
         position: relative;
         background: #667eea;
         color: white;
@@ -89,7 +89,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-    }
+    } */
 
     .user-avatar {
         width: 40px;

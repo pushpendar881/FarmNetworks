@@ -637,7 +637,7 @@
             <div class="alerts-section">
                 <div class="section-header">
                     <h3 class="section-title">Recent Alerts</h3>
-                    <button class="view-all-btn">View All</button>
+                    <!-- <button class="view-all-btn">View All</button> -->
                 </div>
                 <div class="alerts-grid">
                     {#each recentAlerts as alert}
@@ -706,10 +706,13 @@
         </div>
     {/if}
 </div>
-
 <style>
     .dashboard-content {
         padding: 30px 40px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
     }
 
     .loading-container, .error-container {
@@ -719,20 +722,23 @@
         justify-content: center;
         min-height: 400px;
         text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
     }
 
     .dashboard-controls {
         display: flex;
         justify-content: space-between;
-        /* gap: 10px; */
-        /* padding-right: 40px; */
         align-items: center;
         margin-bottom: 25px;
+        flex-wrap: wrap;
+        gap: 15px;
     }
 
     .last-updated {
         color: #718096;
         font-size: 0.875rem;
+        flex-shrink: 0;
     }
 
     .refresh-btn {
@@ -747,6 +753,7 @@
         align-items: center;
         gap: 8px;
         transition: background 0.3s ease;
+        white-space: nowrap;
     }
 
     .refresh-btn:hover:not(:disabled) {
@@ -765,6 +772,7 @@
         border-radius: 8px;
         margin-bottom: 25px;
         border-left: 4px solid #e53e3e;
+        word-wrap: break-word;
     }
 
     .stats-grid {
@@ -772,13 +780,15 @@
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         gap: 25px;
         margin-bottom: 30px;
+        width: 100%;
     }
 
     .charts-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
         gap: 25px;
         margin-bottom: 30px;
+        width: 100%;
     }
 
     .chart-card {
@@ -786,6 +796,9 @@
         padding: 25px;
         border-radius: 15px;
         box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
     }
 
     .chart-title {
@@ -799,6 +812,7 @@
         position: relative;
         height: 300px;
         width: 100%;
+        max-width: 100%;
     }
 
     .chart-legend {
@@ -806,6 +820,7 @@
         justify-content: center;
         gap: 20px;
         margin-top: 15px;
+        flex-wrap: wrap;
     }
 
     .legend-item {
@@ -818,6 +833,7 @@
         width: 12px;
         height: 12px;
         border-radius: 50%;
+        flex-shrink: 0;
     }
 
     .legend-text {
@@ -831,6 +847,8 @@
         border-radius: 15px;
         box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
         margin-bottom: 30px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .earnings-content {
@@ -863,12 +881,14 @@
         justify-content: center;
         background: rgba(255, 255, 255, 0.2);
         border-radius: 10px;
+        flex-shrink: 0;
     }
 
     .earning-value {
         font-size: 20px;
         font-weight: 700;
         margin-bottom: 4px;
+        word-break: break-word;
     }
 
     .earning-label {
@@ -881,46 +901,32 @@
         margin-top: 0;
     }
 
-    .earnings-chart .chart-container {
-        height: 250px;
-    }
     .section-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.add-master-btn {
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background 0.3s ease;
-}
-
-.add-master-btn:hover {
-    background: #059669;
-}
-
-@media (max-width: 600px) {
-    .section-header {
-        flex-direction: column;
-        align-items: flex-start;
+        display: flex;
+        align-items: center;
         gap: 12px;
+        flex-wrap: wrap;
     }
-    
-    .section-actions {
-        width: 100%;
-        justify-content: space-between;
+
+    .add-master-btn {
+        background: #10b981;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background 0.3s ease;
+        white-space: nowrap;
     }
-}
+
+    .add-master-btn:hover {
+        background: #059669;
+    }
 
     .alerts-section {
         background: white;
@@ -928,6 +934,8 @@
         border-radius: 15px;
         box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
         margin-bottom: 30px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .alerts-grid {
@@ -958,32 +966,40 @@
     .alert-icon {
         font-size: 20px;
         margin-top: 2px;
+        flex-shrink: 0;
     }
 
     .alert-content {
         flex: 1;
+        min-width: 0; /* Allows flex child to shrink below content size */
     }
 
     .alert-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 5px;
+        gap: 10px;
     }
 
     .alert-device {
         font-weight: 600;
         color: #2d3748;
+        word-break: break-word;
+        flex: 1;
     }
 
     .alert-time {
         font-size: 12px;
         color: #718096;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
 
     .alert-message {
         font-size: 14px;
         color: #4a5568;
+        word-wrap: break-word;
     }
 
     .masters-section {
@@ -992,19 +1008,25 @@
         border-radius: 15px;
         box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
         margin-bottom: 30px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .section-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 20px;
+        gap: 15px;
+        flex-wrap: wrap;
     }
 
     .section-title {
         font-size: 18px;
         font-weight: 600;
         color: #2d3748;
+        flex: 1;
+        min-width: 200px;
     }
 
     .view-all-btn {
@@ -1014,6 +1036,7 @@
         cursor: pointer;
         font-weight: 600;
         text-decoration: underline;
+        white-space: nowrap;
     }
 
     .error-badge {
@@ -1023,6 +1046,7 @@
         border-radius: 16px;
         font-size: 12px;
         font-weight: 600;
+        white-space: nowrap;
     }
 
     .loading-masters, .masters-error, .no-masters {
@@ -1063,6 +1087,7 @@
         border-radius: 50%;
         animation: spin 1s linear infinite;
         margin: 0 auto;
+        flex-shrink: 0;
     }
     .spinner {
         width: 40px;
@@ -1078,27 +1103,238 @@
         100% { transform: rotate(360deg);}
     }
 
-    /* Responsive design */
+    /* Tablet responsiveness */
     @media (max-width: 1024px) {
         .dashboard-content {
-            padding: 20px;
+            padding: 20px 25px;
         }
+        
         .charts-grid {
             grid-template-columns: 1fr;
+        }
+        
+        .stats-grid {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .chart-container {
+            height: 250px;
+        }
+        
+        .earnings-grid {
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         }
     }
-    @media (max-width: 600px) {
+
+    /* Mobile responsiveness */
+    @media (max-width: 768px) {
         .dashboard-content {
-            padding: 10px;
+            padding: 15px 20px;
+            margin: 0;
+            width: 100%;
+            max-width: 100vw;
+            overflow-x: hidden;
         }
-        .stats-grid, .earnings-grid {
+        
+        .dashboard-controls {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }
+        
+        .last-updated {
+            text-align: center;
+            order: 2;
+        }
+        
+        .refresh-btn {
+            order: 1;
+            justify-content: center;
+        }
+        
+        .stats-grid {
             grid-template-columns: 1fr;
+            gap: 15px;
         }
+        
         .charts-grid {
             grid-template-columns: 1fr;
+            gap: 20px;
         }
-        .chart-card, .earnings-section, .alerts-section, .masters-section {
+        
+        .chart-card {
+            padding: 20px 15px;
+        }
+        
+        .chart-container {
+            height: 200px;
+        }
+        
+        .chart-legend {
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .earnings-section {
+            padding: 20px 15px;
+        }
+        
+        .earnings-grid {
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+        
+        .earning-card {
+            padding: 15px;
+            gap: 12px;
+        }
+        
+        .earning-value {
+            font-size: 18px;
+        }
+        
+        .alerts-section {
+            padding: 20px 15px;
+        }
+        
+        .alert-item {
             padding: 12px;
+            gap: 10px;
         }
+        
+        .alert-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+        }
+        
+        .alert-time {
+            font-size: 11px;
+        }
+        
+        .masters-section {
+            padding: 20px 15px;
+        }
+        
+        .section-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .section-actions {
+            width: 100%;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        
+        .add-master-btn {
+            flex: 1;
+            justify-content: center;
+            min-width: 120px;
+        }
+    }
+
+    /* Small mobile devices */
+    @media (max-width: 480px) {
+        .dashboard-content {
+            padding: 10px 15px;
+        }
+        
+        .chart-card, .earnings-section, .alerts-section, .masters-section {
+            padding: 15px 12px;
+            border-radius: 12px;
+        }
+        
+        .chart-title, .section-title {
+            font-size: 16px;
+        }
+        
+        .chart-container {
+            height: 180px;
+        }
+        
+        .earning-card {
+            flex-direction: column;
+            text-align: center;
+            padding: 15px;
+        }
+        
+        .earning-icon {
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+        }
+        
+        .earning-value {
+            font-size: 16px;
+        }
+        
+        .alert-item {
+            padding: 10px;
+        }
+        
+        .alert-icon {
+            font-size: 18px;
+        }
+        
+        .section-actions {
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .add-master-btn {
+            width: 100%;
+        }
+        
+        .refresh-btn, .export-btn, .retry-btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    /* Very small screens */
+    @media (max-width: 320px) {
+        .dashboard-content {
+            padding: 8px 12px;
+        }
+        
+        .stats-grid {
+            gap: 12px;
+        }
+        
+        .charts-grid {
+            gap: 15px;
+        }
+        
+        .chart-container {
+            height: 160px;
+        }
+        
+        .chart-legend {
+            flex-direction: column;
+            gap: 8px;
+            align-items: center;
+        }
+    }
+
+    
+    
+    .dashboard-content * {
+        box-sizing: border-box;
+    }
+    
+    /* Ensure no elements exceed viewport width */
+    .dashboard-content,
+    .dashboard-content > *,
+    .stats-grid,
+    .charts-grid,
+    .chart-card,
+    .earnings-section,
+    .alerts-section,
+    .masters-section {
+        max-width: 100%;
+        overflow-x: hidden;
     }
 </style>

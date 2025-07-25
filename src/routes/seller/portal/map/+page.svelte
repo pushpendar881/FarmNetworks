@@ -171,106 +171,191 @@
       L.tileLayer(tileUrl, { attribution }).addTo(map);
     }
   
-    function addMarkersToMap() {
-      if (!map) return;
-  
-      // Clear existing markers (except tile layers)
-      map.eachLayer(layer => {
-        if (!(layer instanceof L.TileLayer)) {
-          map.removeLayer(layer);
+// Replace your addMarkersToMap function with this updated version
+function addMarkersToMap() {
+  if (!map) return;
+
+  // Clear existing markers (except tile layers)
+  map.eachLayer(layer => {
+    if (!(layer instanceof L.TileLayer)) {
+      map.removeLayer(layer);
+    }
+  });
+
+  // Add gateway markers with pulsing coverage circles
+  if (showGateways) {
+    filteredGateways.forEach(gateway => {
+      if (gateway.latitude && gateway.longitude) {
+        const lat = parseFloat(gateway.latitude);
+        const lng = parseFloat(gateway.longitude);
+        const color = gateway.status === 'active' ? '#a855f7' : '#ef4444';
+        
+        // Create pulsing circle animation for each gateway
+        createPulsingCircle(lat, lng, gateway.coverage_radius, color);
+        
+        // Gateway marker
+        const gatewayIcon = L.divIcon({
+          className: 'gateway-marker',
+          html: `<div class="gateway-dot ${gateway.status}"></div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        });
+
+        const marker = L.marker([lat, lng], { icon: gatewayIcon })
+          .bindPopup(`
+            <div class="popup-content">
+              <h4>${gateway.name}</h4>
+              <p><strong>Status:</strong> ${gateway.status}</p>
+              <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
+            </div>
+          `)
+          .addTo(map);
+
+        // Click handler to select gateway
+        marker.on('click', () => {
+          selectedGateway = gateway;
+          fetchGatewayDevices(gateway.id);
+        });
+      }
+    });
+  }
+
+  // Add device markers (keep your existing device code)
+  if (showDevices) {
+    filteredDevices.forEach(device => {
+      if (device.latitude && device.longitude) {
+        const lat = parseFloat(device.latitude);
+        const lng = parseFloat(device.longitude);
+        const isOnline = device.motor_status === 1;
+        
+        // For online devices, create pulsing dot
+        if (isOnline) {
+          createPulsingDot(lat, lng, '#22c55e');
         }
-      });
-  
-      // Add gateway markers with coverage circles
-      if (showGateways) {
-        filteredGateways.forEach(gateway => {
-          if (gateway.latitude && gateway.longitude) {
-            const lat = parseFloat(gateway.latitude);
-            const lng = parseFloat(gateway.longitude);
-            
-            // Gateway marker
-            const gatewayIcon = L.divIcon({
-              className: 'gateway-marker',
-              html: `<div class="gateway-dot ${gateway.status}"></div>`,
-              iconSize: [20, 20],
-              iconAnchor: [10, 10]
-            });
-  
-            const marker = L.marker([lat, lng], { icon: gatewayIcon })
-              .bindPopup(`
-                <div class="popup-content">
-                  <h4>${gateway.name}</h4>
-                  <p><strong>Status:</strong> ${gateway.status}</p>
-                  <p><strong>Coordinates:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}</p>
-                </div>
-              `)
-              .addTo(map);
-  
-            // Coverage circle
-            if (gateway.coverage_radius) {
-  const svgCircle = L.circle([lat, lng], {
-    radius: gateway.coverage_radius,
-    color: 'transparent',
-    fillColor: 'transparent',
-    className: 'animatedCircle'  // this will hook into the CSS animation
-  });
+        
+        const deviceIcon = L.divIcon({
+          className: 'device-marker',
+          html: `<div class="device-dot ${isOnline ? 'online' : 'offline'}"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6]
+        });
 
-  // Manually style the SVG element
-  svgCircle.on('add', () => {
-    const path = svgCircle.getElement();
-    if (path) {
-      path.setAttribute('stroke', gateway.status === 'active' ? '#a855f7' : '#ef4444');
-      path.setAttribute('fill', gateway.status === 'active' ? '#a855f7' : '#ef4444');
-      path.setAttribute('fill-opacity', '0.4');
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('class', 'animatedCircle');
-    }
-  });
-
-  svgCircle.addTo(map);
+        L.marker([lat, lng], { icon: deviceIcon })
+          .bindPopup(`
+            <div class="popup-content">
+              <h4>${device.device_name || device.device_id}</h4>
+              <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
+              <p><strong>Customer:</strong> ${device.customer_name || 'Unknown'}</p>
+              <p><strong>Last Updated:</strong> ${new Date(device.updated_at).toLocaleString()}</p>
+              ${device.customer_phone ? `<p><strong>Phone:</strong> ${device.customer_phone}</p>` : ''}
+            </div>
+          `)
+          .addTo(map);
+      }
+    });
+  }
 }
+
+// Add this new function for creating pulsing circles
+function createPulsingCircle(lat, lng, baseRadius, color) {
+  // Static base circle (coverage area)
+  const baseCircle = L.circle([lat, lng], {
+    radius: baseRadius,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.05,
+    weight: 1,
+  }).addTo(map);
+
+  // Animated pulsing circle
+  const pulsingCircle = L.circle([lat, lng], {
+    radius: 0,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0,
+    weight: 0,
+  }).addTo(map);
+
+  // Animation state
+  let animationFrame;
+  let startTime;
   
-  
-            // Click handler to select gateway
-            marker.on('click', () => {
-              selectedGateway = gateway;
-              fetchGatewayDevices(gateway.id);
-            });
-          }
-        });
-      }
-  
-      // Add device markers
-      if (showDevices) {
-        filteredDevices.forEach(device => {
-          if (device.latitude && device.longitude) {
-            const lat = parseFloat(device.latitude);
-            const lng = parseFloat(device.longitude);
-            const isOnline = device.motor_status === 1;
-            
-            const deviceIcon = L.divIcon({
-              className: 'device-marker',
-              html: `<div class="device-dot ${isOnline ? 'online' : 'offline'}"></div>`,
-              iconSize: [12, 12],
-              iconAnchor: [6, 6]
-            });
-  
-                      L.marker([lat, lng], { icon: deviceIcon })
-            .bindPopup(`
-              <div class="popup-content">
-                <h4>${device.device_name || device.device_id}</h4>
-                <p><strong>Status:</strong> ${isOnline ? 'Online' : 'Offline'}</p>
-                <p><strong>Customer:</strong> ${device.customer_name || 'Unknown'}</p>
-                <p><strong>Last Updated:</strong> ${new Date(device.updated_at).toLocaleString()}</p>
-                ${device.customer_phone ? `<p><strong>Phone:</strong> ${device.customer_phone}</p>` : ''}
-              </div>
-            `)
-            .addTo(map);
-          }
-        });
-      }
+  function animatePulse(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = timestamp - startTime;
+    const duration = 1500; // 1.5 seconds
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Calculate radius and opacity
+    const currentRadius = baseRadius * progress;
+    const currentOpacity = 0.8 * (1 - progress);
+    
+    // Update circle
+    pulsingCircle.setRadius(currentRadius);
+    pulsingCircle.setStyle({
+      fillOpacity: currentOpacity
+    });
+    
+    if (progress < 1) {
+      animationFrame = requestAnimationFrame(animatePulse);
+    } else {
+      // Reset for next pulse
+      setTimeout(() => {
+        startTime = null;
+        animationFrame = requestAnimationFrame(animatePulse);
+      }, 1500); // Wait 1.5s before next pulse (total cycle = 3s)
     }
+  }
   
+  // Start animation
+  animationFrame = requestAnimationFrame(animatePulse);
+}
+
+// Add this new function for creating pulsing dots (for online devices)
+function createPulsingDot(lat, lng, color) {
+  // Animated pulsing circle for devices
+  const pulsingDot = L.circle([lat, lng], {
+    radius: 0,
+    color: color,
+    fillColor: color,
+    fillOpacity: 0,
+    weight: 0,
+  }).addTo(map);
+
+  // Animation state
+  let animationFrame;
+  let startTime;
+  
+  function animateDotPulse(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = timestamp - startTime;
+    const duration = 900; // 0.9 seconds
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Calculate radius and opacity (smaller pulse for devices)
+    const currentRadius = 200 * progress; // 200m max radius for devices
+    const currentOpacity = 0.4 * (1 - progress);
+    
+    // Update circle
+    pulsingDot.setRadius(currentRadius);
+    pulsingDot.setStyle({
+      fillOpacity: currentOpacity
+    });
+    
+    if (progress < 1) {
+      animationFrame = requestAnimationFrame(animateDotPulse);
+    } else {
+      // Reset for next pulse
+      setTimeout(() => {
+        startTime = null;
+        animationFrame = requestAnimationFrame(animateDotPulse);
+      }, 2100); // Wait 2.1s before next pulse (total cycle = 3s)
+    }
+  }
+  
+  // Start animation
+  animationFrame = requestAnimationFrame(animateDotPulse);
+}  
         async function fetchGatewayDevices(gatewayId) {
       try {
         const { data, error: fetchError } = await supabase
@@ -1098,6 +1183,87 @@
     transform: scale(1);
     stroke-opacity: 0.4;
     stroke-width: 2;
+  }
+}
+/* Mobile styles that maintain desktop appearance */
+
+@media (max-width: 768px) {
+  .dashboard-content {
+    padding: 10px;
+    width: 100vw;
+    margin: 0;
+    background: #fff;
+    box-shadow: none;
+    border-radius: 0;
+    max-width: none;
+  }
+  .map-section {
+    padding: 10px 0;
+    background: #fff;
+    border-radius: 0;
+    box-shadow: none;
+    margin-bottom: 20px;
+  }
+  .map-container {
+    height: 250px;
+    min-height: 180px;
+    max-height: 40vh;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 0;
+    width: 100%;
+  }
+}
+@media (min-width: 769px) {
+  .map-container {
+    height: 400px;
+    min-height: 300px;
+    max-height: 60vh;
+  }
+}
+
+/* Additional improvements for very small screens */
+@media (max-width: 480px) {
+  .dashboard-content {
+    padding: 10px;
+  }
+
+  .stat-card {
+    padding: 15px;
+    gap: 15px;
+  }
+
+  .stat-icon {
+    width: 45px;
+    height: 45px;
+    font-size: 28px;
+  }
+
+  .stat-number {
+    font-size: 20px;
+  }
+
+  .map-section {
+    padding: 15px;
+  }
+
+  .map-container {
+    height: 280px;
+    min-height: 250px;
+  }
+
+  .filter-group:first-child {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .legend {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .section-title {
+    font-size: 16px;
   }
 }
 

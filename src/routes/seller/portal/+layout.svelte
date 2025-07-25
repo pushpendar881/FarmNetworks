@@ -32,7 +32,7 @@
 
     @media (max-width: 768px) {
         .main-content {
-            margin-left: 70px;
+            margin-left: 0;
             padding: 32px 8px;
         }
     }
