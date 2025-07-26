@@ -1,4 +1,4 @@
-<!-- <script>
+<script>
     import { currentPage } from '../stores/dashboard.js';
     import { page } from '$app/stores';
     import { authStore } from '../stores/auth.js';
@@ -7,26 +7,54 @@
     
     let isCollapsed = false;
     let isMobile = false;
+    let isOpen = false; // For mobile sidebar state
     
     const menuItems = [
         { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/seller/portal/dashboard' },
         { id: 'earnings', icon: '💰', label: 'Earnings', href: '/seller/portal/earnings' },
         { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/seller/portal/map' },
-        // { id: 'settings', icon: '⚙️', label: 'Settings', href: '/seller/portal/settings' },
         { id: 'support', icon: '📞', label: 'Support', href: '/seller/portal/support' },
         { id: 'logout', icon: '🚪', label: 'Logout', action: 'logout' }
     ];
     
     onMount(() => {
         const checkScreenSize = () => {
+            const wasMobile = isMobile;
             isMobile = window.innerWidth <= 768;
+            
+            // Reset states when switching between mobile/desktop
+            if (wasMobile !== isMobile) {
+                if (isMobile) {
+                    isOpen = false; // Close mobile sidebar by default
+                    isCollapsed = false; // Reset collapse state
+                } else {
+                    isOpen = false; // Not used on desktop
+                    isCollapsed = false; // Default to expanded on desktop
+                }
+            }
         };
         
         checkScreenSize();
         window.addEventListener('resize', checkScreenSize);
         
+        // Close mobile sidebar when clicking outside
+        const handleClickOutside = (event) => {
+            if (isMobile && isOpen) {
+                const sidebar = document.querySelector('.sidebar');
+                const toggleBtn = document.querySelector('.mobile-toggle-btn');
+                
+                if (sidebar && !sidebar.contains(event.target) && 
+                    toggleBtn && !toggleBtn.contains(event.target)) {
+                    isOpen = false;
+                }
+            }
+        };
+        
+        document.addEventListener('click', handleClickOutside);
+        
         return () => {
             window.removeEventListener('resize', checkScreenSize);
+            document.removeEventListener('click', handleClickOutside);
         };
     });
     
@@ -37,10 +65,8 @@
     async function handleLogout() {
         try {
             await authStore.signOut();
-            // The signOut function will handle the redirect automatically
         } catch (error) {
             console.error('Logout error:', error);
-            // Fallback redirect
             goto('/seller/auth/login');
         }
     }
@@ -49,30 +75,59 @@
         if (item.action === 'logout') {
             handleLogout();
         }
-        // For other items, let the default link behavior handle navigation
+        
+        // Close mobile sidebar after navigation
+        if (isMobile) {
+            isOpen = false;
+        }
     }
     
     function toggleSidebar() {
-        isCollapsed = !isCollapsed;
+        if (isMobile) {
+            isOpen = !isOpen;
+        } else {
+            isCollapsed = !isCollapsed;
+        }
     }
 </script>
 
+<!-- Mobile toggle button -->
 {#if isMobile}
-  <button
-    class="global-toggle-btn"
-    on:click={toggleSidebar}
-    aria-label="Toggle sidebar"
-  >
-    <span class="toggle-icon">{isCollapsed ? '→' : '←'}</span>
-  </button>
+    <button
+        class="mobile-toggle-btn"
+        on:click={toggleSidebar}
+        aria-label="Toggle sidebar"
+    >
+        <span class="hamburger" class:active={isOpen}>
+            <span></span>
+            <span></span>
+            <span></span>
+        </span>
+    </button>
 {/if}
 
-{#if !isMobile || (isMobile && !isCollapsed)}
-<nav class="sidebar" class:collapsed={isCollapsed}>
+<!-- Desktop collapse toggle button -->
+{#if !isMobile}
+    <button
+        class="desktop-toggle-btn"
+        class:collapsed={isCollapsed}
+        on:click={toggleSidebar}
+        aria-label="Toggle sidebar"
+    >
+        <span class="toggle-icon">{isCollapsed ? '→' : '←'}</span>
+    </button>
+{/if}
+
+<!-- Sidebar -->
+<nav 
+    class="sidebar" 
+    class:collapsed={!isMobile && isCollapsed}
+    class:mobile-open={isMobile && isOpen}
+>
     <div class="sidebar-header">
         <div class="logo">
             <h1>FN</h1>
-            {#if !isCollapsed}
+            {#if !isCollapsed || isMobile}
                 <div class="logo-text">
                     <span class="brand-name">FarmNetwork</span>
                     <span class="version">v1.0</span>
@@ -86,13 +141,13 @@
             <li class="nav-item">
                 {#if item.action === 'logout'}
                     <button 
-                        on:click={handleLogout}
+                        on:click={() => handleItemClick(item)}
                         class="nav-link logout-button" 
                         type="button"
-                        title={isCollapsed ? item.label : ''}
+                        title={(!isMobile && isCollapsed) ? item.label : ''}
                     >
                         <span class="nav-icon">{item.icon}</span>
-                        {#if !isCollapsed}
+                        {#if !isCollapsed || isMobile}
                             <span class="nav-label">{item.label}</span>
                         {/if}
                     </button>
@@ -102,10 +157,11 @@
                         class="nav-link" 
                         class:active={isActive(item.href)}
                         data-sveltekit-preload-data="hover"
-                        title={isCollapsed ? item.label : ''}
+                        title={(!isMobile && isCollapsed) ? item.label : ''}
+                        on:click={() => handleItemClick(item)}
                     >
                         <span class="nav-icon">{item.icon}</span>
-                        {#if !isCollapsed}
+                        {#if !isCollapsed || isMobile}
                             <span class="nav-label">{item.label}</span>
                         {/if}
                     </a>
@@ -114,46 +170,111 @@
         {/each}
     </ul>
 </nav>
-{/if}
 
-{#if isMobile && !isCollapsed}
+<!-- Mobile overlay -->
+{#if isMobile && isOpen}
     <div class="mobile-overlay" on:click={toggleSidebar}></div>
 {/if}
 
 <style>
-    .global-toggle-btn {
+    /* Mobile toggle button */
+    .mobile-toggle-btn {
         position: fixed;
         top: 20px;
         left: 20px;
-        z-index: 2000;
-        background: #fff;
-        border: 1px solid #ccc;
-        border-radius: 50%;
-        width: 36px;
-        height: 36px;
+        z-index: 2001;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        width: 44px;
+        height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         cursor: pointer;
-        transition: background 0.2s;
+        transition: all 0.2s ease;
     }
 
-    .global-toggle-btn:hover {
-        background: #f3f3f3;
+    .mobile-toggle-btn:hover {
+        background: rgba(255, 255, 255, 1);
+        transform: scale(1.05);
     }
 
-    @media (min-width: 769px) {
-        .global-toggle-btn {
-            display: none !important;
-        }
+    /* Hamburger icon */
+    .hamburger {
+        width: 20px;
+        height: 16px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
 
+    .hamburger span {
+        width: 100%;
+        height: 2px;
+        background: #333;
+        border-radius: 1px;
+        transition: all 0.3s ease;
+        transform-origin: center;
+    }
+
+    .hamburger.active span:first-child {
+        transform: rotate(45deg) translate(5px, 5px);
+    }
+
+    .hamburger.active span:nth-child(2) {
+        opacity: 0;
+    }
+
+    .hamburger.active span:last-child {
+        transform: rotate(-45deg) translate(7px, -6px);
+    }
+
+    /* Desktop toggle button */
+    .desktop-toggle-btn {
+        position: fixed;
+        top: 20px;
+        left: 240px;
+        z-index: 1001;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        color: #333;
+    }
+
+    .desktop-toggle-btn:hover {
+        background: rgba(255, 255, 255, 1);
+        transform: scale(1.1);
+    }
+
+    .desktop-toggle-btn.collapsed {
+        left: 85px;
+    }
+
+    .toggle-icon {
+        font-size: 14px;
+        font-weight: bold;
+        transition: transform 0.3s ease;
+    }
+
+    /* Sidebar */
     .sidebar {
-        width: 220px;
-        background: rgba(255, 255, 255, 0.1);
+        width: 260px;
+        background: linear-gradient(180deg, #9370db 0%, #6a5acd 100%);
         backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
+        border-right: none;
         position: fixed;
         top: 0;
         left: 0;
@@ -161,19 +282,22 @@
         overflow-y: auto;
         z-index: 1000;
         box-sizing: border-box;
-        transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
         flex-direction: column;
+        box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
     }
 
     .sidebar.collapsed {
-        width: 65px;
+        width: 70px;
     }
 
+    /* Sidebar header */
     .sidebar-header {
         padding: 20px 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: none;
         position: relative;
+        background: transparent;
     }
 
     .logo {
@@ -217,6 +341,7 @@
         margin: 2px 0 0 0;
     }
 
+    /* Navigation menu */
     .nav-menu {
         list-style: none;
         margin: 0;
@@ -231,7 +356,7 @@
     .nav-link {
         display: flex;
         align-items: center;
-        padding: 12px 15px;
+        padding: 14px 15px;
         color: rgba(255, 255, 255, 0.8);
         text-decoration: none;
         transition: all 0.2s ease;
@@ -246,23 +371,25 @@
         box-sizing: border-box;
         text-align: left;
         position: relative;
-        min-height: 44px;
+        min-height: 48px;
     }
 
     .sidebar.collapsed .nav-link {
         justify-content: center;
-        padding: 12px;
+        padding: 14px 12px;
     }
 
     .nav-link:hover, .nav-link.active {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.15);
         color: white;
         border-left-color: #00ff88;
+        box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.1);
     }
 
     .logout-button:hover {
-        background: rgba(255, 59, 48, 0.15);
+        background: rgba(255, 59, 48, 0.2);
         border-left-color: #ff3b30;
+        box-shadow: inset 0 0 20px rgba(255, 59, 48, 0.1);
     }
 
     .nav-icon {
@@ -290,11 +417,7 @@
         transition: opacity 0.2s ease;
     }
 
-   
-    .sidebar.collapsed .nav-link {
-        position: relative;
-    }
-
+    /* Tooltip for collapsed desktop sidebar */
     .sidebar.collapsed .nav-link:hover::after {
         content: attr(title);
         position: absolute;
@@ -303,19 +426,21 @@
         transform: translateY(-50%);
         background: rgba(0, 0, 0, 0.9);
         color: white;
-        padding: 6px 10px;
+        padding: 8px 12px;
         border-radius: 6px;
         font-size: 12px;
         white-space: nowrap;
         z-index: 1001;
         opacity: 0;
         animation: fadeIn 0.2s ease forwards;
+        pointer-events: none;
     }
 
     @keyframes fadeIn {
         to { opacity: 1; }
     }
 
+    /* Mobile overlay */
     .mobile-overlay {
         position: fixed;
         top: 0;
@@ -325,26 +450,28 @@
         background: rgba(0, 0, 0, 0.5);
         z-index: 999;
         cursor: pointer;
+        backdrop-filter: blur(2px);
     }
 
+    /* Mobile styles */
     @media (max-width: 768px) {
+        .desktop-toggle-btn {
+            display: none;
+        }
+
         .sidebar {
-            width: 260px;
+            width: 280px;
             transform: translateX(-100%);
-            transition: transform 0.3s ease;
+            box-shadow: none;
         }
         
-        .sidebar:not(.collapsed) {
+        .sidebar.mobile-open {
             transform: translateX(0);
-            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
         }
         
         .sidebar-header {
-            padding: 15px;
-        }
-        
-        .logo {
-            justify-content: flex-start;
+            padding: 20px 15px;
         }
         
         .logo h1 {
@@ -352,13 +479,13 @@
         }
         
         .nav-menu {
-            padding: 10px 0;
+            padding: 15px 0;
         }
         
         .nav-link {
-            padding: 12px 15px;
+            padding: 14px 15px;
             justify-content: flex-start;
-            min-height: 44px;
+            min-height: 48px;
         }
         
         .nav-icon {
@@ -369,29 +496,23 @@
         .nav-label {
             display: block;
         }
+
+        /* Hide desktop toggle on mobile */
+        .desktop-toggle-btn {
+            display: none !important;
+        }
     }
 
-   
-    @media (max-width: 768px) {
-        .sidebar.collapsed .nav-icon {
-            margin-right: 12px;
-        }
-        
-        .sidebar.collapsed .nav-link {
-            justify-content: flex-start;
-            padding: 12px 15px;
-        }
-        
-        .sidebar.collapsed .logo-text {
-            display: flex;
-        }
-    }
     @media (max-width: 480px) {
-        .global-toggle-btn {
+        .mobile-toggle-btn {
             top: 15px;
             left: 15px;
-            width: 32px;
-            height: 32px;
+            width: 40px;
+            height: 40px;
+        }
+        
+        .sidebar {
+            width: 260px;
         }
         
         .logo h1 {
@@ -400,8 +521,8 @@
         }
         
         .nav-link {
-            padding: 10px 15px;
-            min-height: 42px;
+            padding: 12px 15px;
+            min-height: 44px;
         }
         
         .nav-icon {
@@ -409,35 +530,34 @@
         }
     }
 
-   
+    /* Main content adjustments */
     :global(.main-content) {
-        margin-left: 220px;
+        margin-left: 260px;
         padding: 20px;
         min-height: 100vh;
         box-sizing: border-box;
         transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    :global(.sidebar.collapsed ~ .main-content),
-    :global(body:has(.sidebar.collapsed) .main-content) {
-        margin-left: 65px;
+    :global(.sidebar.collapsed ~ .main-content) {
+        margin-left: 70px;
     }
 
     @media (max-width: 768px) {
         :global(.main-content) {
             margin-left: 0;
-            padding: 70px 15px 15px 15px;
+            padding: 80px 15px 15px 15px;
         }
     }
 
     @media (max-width: 480px) {
         :global(.main-content) {
             margin-left: 0;
-            padding: 55px 12px 12px 12px;
+            padding: 70px 12px 12px 12px;
         }
     }
 
- 
+    /* Scrollbar styling */
     .sidebar::-webkit-scrollbar {
         width: 4px;
     }
@@ -454,214 +574,4 @@
     .sidebar::-webkit-scrollbar-thumb:hover {
         background: rgba(255, 255, 255, 0.3);
     }
-</style> -->
-
-<script>
-    import { currentPage } from '../stores/dashboard.js';
-    import { page } from '$app/stores';
-    import { authStore } from '../stores/auth.js';
-    import { goto } from '$app/navigation';
-    
-    const menuItems = [
-        { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/seller/portal/dashboard' },
-        { id: 'earnings', icon: '💰', label: 'Earnings', href: '/seller/portal/earnings' },
-        { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/seller/portal/map' },
-        // { id: 'settings', icon: '⚙️', label: 'Settings', href: '/seller/portal/settings' },
-        { id: 'support', icon: '📞', label: 'Support', href: '/seller/portal/support' },
-        { id: 'logout', icon: '🚪', label: 'Logout', action: 'logout' }
-    ];
-    
-    function isActive(href) {
-        return $page.url.pathname === href;
-    }
-    
-    async function handleLogout() {
-        try {
-            await authStore.signOut();
-            // The signOut function will handle the redirect automatically
-        } catch (error) {
-            console.error('Logout error:', error);
-            // Fallback redirect
-            goto('/seller/auth/login');
-        }
-    }
-    
-    function handleItemClick(item) {
-        if (item.action === 'logout') {
-            handleLogout();
-        }
-        // For other items, let the default link behavior handle navigation
-    }
-</script>
-
-<nav class="sidebar">
-    <div class="logo">
-        <h1>FarmNetwork</h1>
-        <p>Seller Dashboard v1.0</p>
-    </div>
-    <ul class="nav-menu">
-        {#each menuItems as item}
-            <li class="nav-item">
-                {#if item.action === 'logout'}
-                    <button 
-                        on:click={handleLogout}
-                        class="nav-link logout-button" 
-                        type="button"
-                    >
-                        <span class="nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
-                    </button>
-                {:else}
-                    <a 
-                        href={item.href} 
-                        class="nav-link" 
-                        class:active={isActive(item.href)}
-                        data-sveltekit-preload-data="hover"
-                    >
-                        <span class="nav-icon">{item.icon}</span>
-                        <span>{item.label}</span>
-                    </a>
-                {/if}
-            </li>
-        {/each}
-    </ul>
-</nav>
-
-<style>
-    .sidebar {
-        width: 280px;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 20px 0;
-        position: fixed;
-        top: 0;
-        left: 0; /* Ensures it's always on the left */
-        right: auto; /* Prevents it from appearing on the right */
-        height: 100vh;
-        overflow-y: auto;
-        z-index: 1000; /* Increased z-index to ensure it's above other content */
-        box-sizing: border-box;
-        transform: translateX(0); /* Ensures no transformation moves it */
-    }
-
-    .logo {
-        text-align: center;
-        padding: 0 20px 30px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 30px;
-    }
-
-    .logo h1 {
-        color: white;
-        font-size: 24px;
-        font-weight: 700;
-        margin: 0;
-    }
-
-    .logo p {
-        color: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        margin: 5px 0 0 0;
-    }
-
-    .nav-menu {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
-
-    .nav-item {
-        margin-bottom: 5px;
-    }
-
-    .nav-link {
-        display: flex;
-        align-items: center;
-        padding: 15px 25px;
-        color: rgba(255, 255, 255, 0.8);
-        text-decoration: none;
-        transition: all 0.3s ease;
-        border-left: 3px solid transparent;
-        width: 100%;
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-family: inherit;
-        font-size: inherit;
-        box-sizing: border-box;
-        text-align: left; /* Ensures text alignment is left */
-    }
-
-    .nav-link:hover, .nav-link.active {
-        background: rgba(255, 255, 255, 0.1);
-        color: white;
-        border-left-color: #00ff88;
-    }
-
-    .logout-button:hover {
-        background: rgba(255, 59, 48, 0.2);
-        border-left-color: #ff3b30;
-    }
-
-    .nav-icon {
-        width: 20px;
-        height: 20px;
-        margin-right: 15px;
-        font-size: 18px;
-        flex-shrink: 0;
-    }
-
-    /* Mobile styles */
-    @media (max-width: 768px) {
-        .sidebar {
-            width: 70px;
-            left: 0; /* Explicitly set left position */
-            right: auto; /* Ensure it doesn't appear on right */
-        }
-        
-        .nav-link span:not(.nav-icon) {
-            display: none;
-        }
-        
-        .nav-link {
-            padding: 15px 10px;
-            justify-content: center;
-        }
-        
-        .nav-icon {
-            margin-right: 0;
-        }
-        
-        .logo h1 {
-            font-size: 16px;
-        }
-        
-        .logo p {
-            display: none;
-        }
-    }
-
-    /* Ensure body doesn't have conflicting styles */
-    :global(body) {
-        margin: 0;
-        padding: 0;
-        direction: ltr; /* Ensure left-to-right layout */
-    }
-
-    /* Main content area adjustments */
-    :global(.main-content) {
-        margin-left: 280px;
-        margin-right: 0; /* Ensure no right margin */
-        padding: 20px;
-        min-height: 100vh;
-        box-sizing: border-box;
-    }
-
-    @media (max-width: 768px) {
-        :global(.main-content) {
-            margin-left: 70px;
-            margin-right: 0; /* Ensure no right margin on mobile */
-        }
-    }
-</style>    
+</style>

@@ -125,15 +125,42 @@
           // Default center (Mumbai area based on your coordinates)
           const defaultCenter = [19.2686, 73.9472];
           
-          map = L.map(mapContainer, {
+          // Mobile-optimized map options
+          const isMobile = window.innerWidth <= 768;
+          const mapOptions = {
             center: defaultCenter,
-            zoom: 12,
-            zoomControl: true
-          });
+            zoom: isMobile ? 10 : 12,
+            zoomControl: true,
+            // Mobile-specific optimizations
+            tap: true,
+            tapTolerance: 15,
+            // Improve performance on mobile
+            preferCanvas: isMobile,
+            // Better touch handling
+            bounceAtZoomLimits: false,
+            // Reduce memory usage
+            maxZoom: 18,
+            minZoom: 3
+          };
+          
+          map = L.map(mapContainer, mapOptions);
     
           console.log('Map initialized successfully');
           updateMapTiles();
           addMarkersToMap();
+          
+          // Mobile-specific event handling
+          if (isMobile) {
+            // Prevent zoom on double tap
+            map.doubleClickZoom.disable();
+            
+            // Add touch-friendly zoom controls
+            L.control.zoom({
+              position: 'bottomright',
+              zoomInTitle: 'Zoom in',
+              zoomOutTitle: 'Zoom out'
+            }).addTo(map);
+          }
         } catch (err) {
           console.error('Error initializing map:', err);
           error = 'Failed to initialize map';
@@ -936,17 +963,90 @@ function createPulsingDot(lat, lng, color) {
       background: #10b981;
     }
   
-    .legend-dot.device.offline {
-      background: #ef4444;
-    }
-  
-    .map-container {
-      height: 600px;
-      border-radius: 12px;
-      overflow: hidden;
-      position: relative;
-      border: 1px solid #e5e7eb;
-    }
+      .legend-dot.device.offline {
+    background: #ef4444;
+  }
+
+  /* Map marker styles */
+  .gateway-marker {
+    background: transparent;
+    border: none;
+  }
+
+  .gateway-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    position: relative;
+  }
+
+  .gateway-dot.active {
+    background: #6366f1;
+  }
+
+  .gateway-dot.inactive {
+    background: #ef4444;
+  }
+
+  .device-marker {
+    background: transparent;
+    border: none;
+  }
+
+  .device-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .device-dot.online {
+    background: #10b981;
+  }
+
+  .device-dot.offline {
+    background: #ef4444;
+  }
+
+  /* Popup styles */
+  :global(.leaflet-popup-content-wrapper) {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  :global(.leaflet-popup-content) {
+    margin: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  :global(.leaflet-popup-content h4) {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  :global(.leaflet-popup-content p) {
+    margin: 4px 0;
+    color: #6b7280;
+  }
+
+  :global(.leaflet-popup-content strong) {
+    color: #374151;
+  }
+
+  .map-container {
+    height: 600px;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid #e5e7eb;
+  }
   
     .leaflet-map {
       height: 100%;
@@ -1190,80 +1290,314 @@ function createPulsingDot(lat, lng, color) {
 @media (max-width: 768px) {
   .dashboard-content {
     padding: 10px;
-    width: 100vw;
+    width: 100%;
     margin: 0;
     background: #fff;
     box-shadow: none;
     border-radius: 0;
     max-width: none;
+    min-height: 100vh;
   }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    padding: 20px;
+    flex-direction: row;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .stat-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+
+  .stat-number {
+    font-size: 24px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+  }
+
+  .stat-detail {
+    font-size: 11px;
+  }
+
   .map-section {
-    padding: 10px 0;
+    padding: 15px;
     background: #fff;
     border-radius: 0;
     box-shadow: none;
     margin-bottom: 20px;
   }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+
+  .section-title {
+    font-size: 18px;
+    margin: 0;
+  }
+
+  .filter-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .filter-group {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .filter-group:first-child {
+    justify-content: flex-start;
+    gap: 20px;
+  }
+
+  .checkbox-label {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .filter-select {
+    flex: 1;
+    min-width: 120px;
+    font-size: 13px;
+    padding: 10px 12px;
+  }
+
+  .legend {
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    font-size: 12px;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+  }
+
   .map-container {
-    height: 250px;
-    min-height: 180px;
-    max-height: 40vh;
+    height: 300px;
+    min-height: 250px;
+    max-height: 50vh;
     border-radius: 8px;
     overflow: hidden;
     margin: 0;
     width: 100%;
   }
+
+  .gateway-details-section {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .gateway-info-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .devices-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .device-card {
+    padding: 12px;
+  }
+
+  .device-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .detail-row {
+    font-size: 12px;
+  }
 }
+
 @media (min-width: 769px) {
   .map-container {
-    height: 400px;
-    min-height: 300px;
-    max-height: 60vh;
+    height: 600px;
+    min-height: 500px;
+    max-height: 80vh;
   }
 }
 
 /* Additional improvements for very small screens */
 @media (max-width: 480px) {
   .dashboard-content {
-    padding: 10px;
+    padding: 8px;
   }
 
   .stat-card {
     padding: 15px;
-    gap: 15px;
+    gap: 12px;
   }
 
   .stat-icon {
-    width: 45px;
-    height: 45px;
-    font-size: 28px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
   }
 
   .stat-number {
     font-size: 20px;
   }
 
+  .stat-label {
+    font-size: 12px;
+  }
+
   .map-section {
-    padding: 15px;
-  }
-
-  .map-container {
-    height: 280px;
-    min-height: 250px;
-  }
-
-  .filter-group:first-child {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .legend {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    padding: 12px;
   }
 
   .section-title {
     font-size: 16px;
+  }
+
+  .filter-controls {
+    gap: 12px;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .filter-group:first-child {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .checkbox-label {
+    font-size: 12px;
+  }
+
+  .filter-select {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .legend {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .legend-item {
+    font-size: 11px;
+  }
+
+  .map-container {
+    height: 250px;
+    min-height: 200px;
+    max-height: 40vh;
+  }
+
+  .gateway-details-section {
+    padding: 12px;
+  }
+
+  .info-card {
+    padding: 15px;
+  }
+
+  .device-card {
+    padding: 10px;
+  }
+
+  .detail-row {
+    font-size: 11px;
+  }
+}
+
+/* Touch-friendly improvements */
+@media (max-width: 768px) {
+  .control-btn,
+  .retry-btn,
+  .close-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+
+  .filter-select {
+    min-height: 44px;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Improve map touch interactions */
+  .leaflet-map {
+    touch-action: manipulation;
+  }
+
+  /* Better spacing for mobile */
+  .section-header {
+    margin-bottom: 20px;
+  }
+
+  .filter-controls {
+    margin-bottom: 20px;
+  }
+
+  .legend {
+    margin-bottom: 20px;
+  }
+}
+
+/* Landscape orientation adjustments */
+@media (max-width: 768px) and (orientation: landscape) {
+  .map-container {
+    height: 200px;
+    min-height: 180px;
+    max-height: 35vh;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-icon {
+    width: 35px;
+    height: 35px;
+    font-size: 18px;
+  }
+
+  .stat-number {
+    font-size: 18px;
   }
 }
 

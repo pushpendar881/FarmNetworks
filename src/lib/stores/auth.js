@@ -86,6 +86,42 @@ const validatePincode = (pincode) => {
 };
 
 export const authStore = {
+  // Initialize authentication
+  initializeAuth: async () => {
+    if (!browser || !supabase) return;
+    
+    loading.set(true);
+    
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (currentSession) {
+        session.set(currentSession);
+        user.set(currentSession.user);
+      }
+
+      // Listen for auth changes
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, currentSession) => {
+          if (currentSession) {
+            session.set(currentSession);
+            user.set(currentSession.user);
+          } else {
+            session.set(null);
+            user.set(null);
+          }
+          loading.set(false);
+        }
+      );
+
+      return () => subscription.unsubscribe();
+    } catch (error) {
+      console.error('Error initializing auth:', error);
+    } finally {
+      loading.set(false);
+    }
+  },
+
   // Enhanced Sign In
   signIn: async (email, password) => {
     if (!supabase) return { success: false, error: 'Authentication service not available' };
@@ -985,6 +1021,24 @@ signupSeller: async (formData) => {
       return { success: true, message: 'Profile updated successfully' };
     } catch (err) {
       return { success: false, error: err.message };
+    }
+  },
+
+  // Get current user
+  getCurrentUser: async () => {
+    if (!supabase) return null;
+    
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        return null;
+      }
+      
+      return user;
+    } catch (err) {
+      console.error('Error getting current user:', err);
+      return null;
     }
   },
 

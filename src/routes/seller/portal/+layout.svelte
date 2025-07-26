@@ -21,19 +21,30 @@
         box-sizing: border-box;
     }
 
-    /* Remove flex container */
-
     .main-content {
-        margin-left: 280px;
+        margin-left: 260px;
         min-height: 100vh;
         padding: 32px 24px;
         background: #fff;
+        transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* When sidebar is collapsed */
+    :global(.sidebar.collapsed ~ .main-content) {
+        margin-left: 70px;
     }
 
     @media (max-width: 768px) {
         .main-content {
             margin-left: 0;
-            padding: 32px 8px;
+            padding: 80px 15px 15px 15px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .main-content {
+            margin-left: 0;
+            padding: 70px 12px 12px 12px;
         }
     }
 </style>
