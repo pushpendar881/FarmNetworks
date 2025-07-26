@@ -24,11 +24,11 @@
     let hasAttemptedSubmit = false; // Track if user has tried to submit
 
     // Debug logging function
-    const debugLog = (message, data = null) => {
-        if (debugMode) {
-            console.log(`[DEBUG] ${message}`, data);
-        }
-    };
+    // const debugLog = (message, data = null) => {
+    //     if (debugMode) {
+    //         console.log(`[DEBUG] ${message}`, data);
+    //     }
+    // };
 
     // Enhanced validation functions
     const validateEmail = (email) => {
@@ -58,7 +58,7 @@
     };
 
     const validateForm = () => {
-        debugLog('Starting form validation...');
+        // debugLog('Starting form validation...');
         const newErrors = {};
 
         // Email validation
@@ -139,12 +139,12 @@
         }
 
         const isFormValid = Object.keys(newErrors).length === 0;
-        debugLog('Form validation completed', { isValid: isFormValid, errors: newErrors });
+        // debugLog('Form validation completed', { isValid: isFormValid, errors: newErrors });
         return { isValid: isFormValid, errors: newErrors };
     };
 
     const handleSubmit = async (event) => {
-        debugLog('Form submission started', { event, formData });
+        // debugLog('Form submission started', { event, formData });
         
         // Prevent default form submission
         if (event) {
@@ -162,7 +162,7 @@
 
         // Check if authStore exists
         if (!authStore || typeof authStore.signupSeller !== 'function') {
-            debugLog('authStore not available or signupSeller method missing');
+            // debugLog('authStore not available or signupSeller method missing');
             addToast('Authentication service not available', 'error');
             return;
         }
@@ -172,24 +172,24 @@
         errors = validation.errors;
         
         if (!validation.isValid) {
-            debugLog('Form validation failed', validation.errors);
+            // debugLog('Form validation failed', validation.errors);
             addToast('Please fix the errors below', 'error');
             return;
         }
 
-        debugLog('Form validation passed, starting submission');
+        // debugLog('Form validation passed, starting submission');
         isSubmitting = true;
 
         try {
             // Add some visual feedback
-            debugLog('Calling authStore.signupSeller...');
+            // debugLog('Calling authStore.signupSeller...');
             
             const result = await authStore.signupSeller(formData);
             
-            debugLog('authStore.signupSeller result:', result);
+            // debugLog('authStore.signupSeller result:', result);
 
             if (result && result.success) {
-                debugLog('Signup successful', result);
+                // debugLog('Signup successful', result);
                 const message = result.message || 'Account created successfully! Please check your email to verify your account.';
                 addToast(message, 'success');
                 
@@ -197,12 +197,12 @@
                 try {
                     await goto('/seller/auth/login');
                 } catch (navError) {
-                    debugLog('Navigation error:', navError);
+                    // debugLog('Navigation error:', navError);
                     // Fallback navigation
                     window.location.href = '/seller/auth/login';
                 }
             } else {
-                debugLog('Signup failed', result);
+                // debugLog('Signup failed', result);
                 
                 if (result && result.errors) {
                     // Handle validation errors from the server
@@ -214,7 +214,7 @@
                 }
             }
         } catch (error) {
-            debugLog('Signup error caught:', error);
+            // debugLog('Signup error caught:', error);
             console.error('Signup error:', error);
             
             // More detailed error handling
@@ -228,23 +228,23 @@
             
             addToast(errorMessage, 'error');
         } finally {
-            debugLog('Form submission completed');
+            // debugLog('Form submission completed');
             isSubmitting = false;
         }
     };
 
     // Test function to check if services are available
-    const testServices = () => {
-        debugLog('Testing services...');
-        debugLog('authStore available:', !!authStore);
-        debugLog('authStore.signupSeller available:', !!(authStore && authStore.signupSeller));
-        debugLog('addToast available:', !!addToast);
-        debugLog('goto available:', !!goto);
-        debugLog('loading store available:', !!loading);
-    };
+// const testServices = () => {
+//         debugLog('Testing services...');
+//         debugLog('authStore available:', !!authStore);
+//         debugLog('authStore.signupSeller available:', !!(authStore && authStore.signupSeller));
+//         debugLog('addToast available:', !!addToast);
+//         debugLog('goto available:', !!goto);
+//         debugLog('loading store available:', !!loading);
+//     };
 
-    // Test services on component mount
-    testServices();
+//     // Test services on component mount
+//     testServices();
 
     const formatPhoneNumber = (value) => {
         const numbers = value.replace(/\D/g, '');
@@ -272,7 +272,7 @@
             }
         }
     }
-
+    
     // Real-time validation for confirm password
     $: if (formData.confirmPassword && formData.password && hasAttemptedSubmit) {
         if (formData.password !== formData.confirmPassword) {
@@ -357,7 +357,7 @@
             </p>
             
             <!-- Debug Panel (remove in production) -->
-            {#if debugMode}
+<!--            
                 <div class="mt-4 p-4 bg-yellow-100 border border-yellow-400 rounded-md">
                     <h3 class="text-sm font-medium text-yellow-800">Debug Info</h3>
                     <p class="text-xs text-yellow-700">
@@ -374,7 +374,7 @@
                         Test Services
                     </button>
                 </div>
-            {/if}
+            -->
         </div>
 
         <form class="mt-8 space-y-6" on:submit={handleSubmit}>
@@ -633,9 +633,9 @@
                     />
                     <label for="agreeToTerms" class="ml-2 block text-sm text-gray-900">
                         I agree to the 
-                        <a href="/terms" class="text-blue-600 hover:text-blue-500">Terms and Conditions</a>
+                        <a href="https://farmnetworks.in/pages/terms-and-conditions.html" class="text-blue-600 hover:text-blue-500">Terms and Conditions</a>
                         and 
-                        <a href="/privacy" class="text-blue-600 hover:text-blue-500">Privacy Policy</a>
+                        <a href="https://farmnetworks.in/pages/privacy-policy.html" class="text-blue-600 hover:text-blue-500">Privacy Policy</a>
                     </label>
                 </div>
                 {#if errors.agreeToTerms}

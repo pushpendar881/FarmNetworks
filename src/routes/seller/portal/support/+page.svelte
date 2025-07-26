@@ -23,15 +23,15 @@
         <div class="contact-options">
           <div class="contact-item">
             <span class="contact-icon">📧</span>
-            <a href="mailto:farmnetworks@gmail.com" class="contact-link">
-              farmnetworks@gmail.com
+            <a href="mailto:farmnetworks.in@gmail.com" class="contact-link">
+              farmnetworks.in@gmail.com
             </a>
           </div>
           
           <div class="contact-item">
             <span class="contact-icon">📞</span>
-            <a href="tel:1234567890" class="contact-link">
-              1234567890
+            <a href="tel:9284647117" class="contact-link">
+              9284647117
             </a>
           </div>
           

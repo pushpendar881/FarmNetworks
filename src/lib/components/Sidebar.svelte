@@ -129,7 +129,7 @@
             <h1>FN</h1>
             {#if !isCollapsed || isMobile}
                 <div class="logo-text">
-                    <span class="brand-name">FarmNetwork</span>
+                    <span class="brand-name">FarmNetworks</span>
                     <span class="version">v1.0</span>
                 </div>
             {/if}

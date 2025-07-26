@@ -45,8 +45,6 @@
         
         <nav class="hidden md:flex space-x-8">
           <a href="#features" class="text-gray-600 hover:text-gray-900 transition-colors">Features</a>
-          <a href="#about" class="text-gray-600 hover:text-gray-900 transition-colors">About</a>
-          <a href="#contact" class="text-gray-600 hover:text-gray-900 transition-colors">Contact</a>
         </nav>
       </div>
     </div>
