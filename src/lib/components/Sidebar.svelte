@@ -126,10 +126,11 @@
 >
     <div class="sidebar-header">
         <div class="logo">
-            <h1>FN</h1>
+            <!-- <h1>FN</h1> -->
+            <img src="/images/blacklogo.png" alt="FarmNetworks" class="w-8 h-8">
             {#if !isCollapsed || isMobile}
                 <div class="logo-text">
-                    <span class="brand-name">FarmNetworks</span>
+                    <span class="brand-name ">FarmNetworks</span> 
                     <span class="version">v1.0</span>
                 </div>
             {/if}
@@ -306,7 +307,7 @@
         gap: 12px;
     }
 
-    .logo h1 {
+    /* .logo h1 {
         color: #00ff88;
         font-size: 20px;
         font-weight: 700;
@@ -318,7 +319,7 @@
         padding: 8px;
         border-radius: 8px;
         flex-shrink: 0;
-    }
+    } */
 
     .logo-text {
         display: flex;
@@ -327,16 +328,16 @@
     }
 
     .brand-name {
-        color: white;
-        font-size: 16px;
+        color: rgb(0, 0, 0);
+        font-size: 24px;
         font-weight: 600;
         line-height: 1.2;
         margin: 0;
     }
 
     .version {
-        color: rgba(255, 255, 255, 0.6);
-        font-size: 11px;
+        color: rgba(0, 0, 0, 0.6);
+        font-size: 12px;
         line-height: 1;
         margin: 2px 0 0 0;
     }
@@ -473,10 +474,10 @@
         .sidebar-header {
             padding: 20px 15px;
         }
-        
+/*         
         .logo h1 {
             font-size: 18px;
-        }
+        } */
         
         .nav-menu {
             padding: 15px 0;
@@ -515,11 +516,11 @@
             width: 260px;
         }
         
-        .logo h1 {
+        /* .logo h1 {
             font-size: 16px;
             padding: 6px;
         }
-        
+         */
         .nav-link {
             padding: 12px 15px;
             min-height: 44px;

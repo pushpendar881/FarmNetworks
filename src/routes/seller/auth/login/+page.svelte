@@ -82,9 +82,10 @@
   <div class="max-w-md w-full space-y-8">
       <div>
           <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-green-100">
-              <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <!-- <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+              </svg> -->
+              <img src="/images/logo.png" alt="FarmNetworks" class="">
           </div>
           <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
               Seller Login

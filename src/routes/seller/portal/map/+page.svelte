@@ -122,8 +122,10 @@
       if (typeof window !== 'undefined' && window.L && mapContainer) {
         try {
           console.log('Initializing Leaflet map...');
-          // Default center (Mumbai area based on your coordinates)
-          const defaultCenter = [19.2686, 73.9472];
+          let defaultCenter = [19.2686, 73.9472];
+          if (gateways && gateways.length > 0 && gateways[0].latitude && gateways[0].longitude) {
+            defaultCenter = [parseFloat(gateways[0].latitude), parseFloat(gateways[0].longitude)];
+          }
           
           // Mobile-optimized map options
           const isMobile = window.innerWidth <= 768;
