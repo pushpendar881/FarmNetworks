@@ -1,4 +1,6 @@
 // src/routes/seller/portal/+layout.server.js (corrected filename)
+export const prerender = false;
+
 import { redirect } from '@sveltejs/kit'
 
 /** @type {import('./$types').LayoutServerLoad} */

@@ -171,13 +171,13 @@
             class="block w-full bg-purple-600 text-white text-center py-3 px-4 rounded-lg font-medium hover:bg-purple-700 transition-colors"
           >
             Admin Sign In
-          </a>
+          <!-- </a>
           <a 
             href="/admin/auth/signup" 
             class="block w-full bg-purple-50 text-purple-600 text-center py-3 px-4 rounded-lg font-medium hover:bg-purple-100 transition-colors border border-purple-200"
           >
             Request Admin Access
-          </a>
+          </a> -->
         </div>
       </div>
     </div>
