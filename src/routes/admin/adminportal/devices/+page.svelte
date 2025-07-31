@@ -202,15 +202,15 @@
       </select>
     </div>
 
-    <button class="more-filters-btn" on:click={toggleMoreFilters}>
+    <!-- <button class="more-filters-btn" on:click={toggleMoreFilters}>
       🔽 More Filters
-    </button>
+    </button> -->
   </div>
 
   <!-- Stats Cards -->
   <div class="stats-section" in:fly={{ y: 30, delay: 400 }}>
     <div class="stat-card">
-      <div class="stat-icon">📱</div>
+      <!-- <div class="stat-icon">📱</div> -->
       <div class="stat-content">
         <div class="stat-label">Total Devices</div>
         <div class="stat-value">{totalDevices}</div>
@@ -218,7 +218,7 @@
     </div>
 
     <div class="stat-card online">
-      <div class="stat-icon">📶</div>
+      <!-- <div class="stat-icon">📶</div> -->
       <div class="stat-content">
         <div class="stat-label">Online</div>
         <div class="stat-value">{onlineDevices}</div>
@@ -226,7 +226,7 @@
     </div>
 
     <div class="stat-card offline">
-      <div class="stat-icon">📵</div>
+      <!-- <div class="stat-icon">📵</div> -->
       <div class="stat-content">
         <div class="stat-label">Offline</div>
         <div class="stat-value">{offlineDevices}</div>
@@ -234,7 +234,7 @@
     </div>
 
     <div class="stat-card warning">
-      <div class="stat-icon">⚠️</div>
+      <!-- <div class="stat-icon">⚠️</div> -->
       <div class="stat-content">
         <div class="stat-label">Expiring Soon</div>
         <div class="stat-value">{expiringDevices}</div>
@@ -260,16 +260,16 @@
         <table class="devices-table">
           <thead>
             <tr>
-              <th>
-                <input type="checkbox" class="checkbox" />
-              </th>
+              <!-- <th>
+                 <input type="checkbox" class="checkbox" /> 
+              </th> -->
               <th>DEVICE INFO</th>
               <th>GATEWAY</th>
               <th>USER</th>
               <th>STATUS</th>
               <th>LAST ACTIVE</th>
               <th>SUBSCRIPTION</th>
-              <th>ACTIONS</th>
+              <!-- <th>ACTIONS</th> -->
             </tr>
           </thead>
           <tbody>
@@ -278,9 +278,9 @@
               {@const gatewayName = getGatewayName(device.gateway_id)}
               {@const userName = getUserName(device.user_id)}
               <tr class="device-row" in:fly={{ x: 30, delay: 800 + (i * 100) }}>
-                <td>
+                <!-- <td>
                   <input type="checkbox" class="checkbox" />
-                </td>
+                </td> -->
                 <td class="device-info">
                   <div class="device-details">
                     <div class="device-id">{device.device_id}</div>
@@ -333,11 +333,11 @@
                     {/if}
                   </div>
                 </td>
-                <td class="actions-cell">
+                <!-- <td class="actions-cell">
                   <button class="view-details-btn" on:click={() => viewDetails(device.device_id)}>
                     👁️ View Details
                   </button>
-                </td>
+                </td> -->
               </tr>
             {/each}
           </tbody>

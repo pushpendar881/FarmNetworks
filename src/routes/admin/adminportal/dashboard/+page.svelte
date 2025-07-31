@@ -28,8 +28,8 @@
               data: data.monthlyGrowth.map(d => d.value),
               backgroundColor: function(context) {
                 const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
-                gradient.addColorStop(0, '#667eea');
-                gradient.addColorStop(1, '#764ba2');
+                gradient.addColorStop(0,'#667eea');
+                // gradient.addColorStop(1, '#764ba2');
                 return gradient;
               },
               borderRadius: 8,
@@ -85,7 +85,7 @@
       value: data.totalDevices.toLocaleString(),
       change: '+12%',
       changeType: 'positive',
-      icon: '📱',
+      // icon: '📱',
       color: 'from-blue-400 to-blue-600'
     },
     {
@@ -93,7 +93,7 @@
       value: data.activeMasters,
       change: '+3%',
       changeType: 'positive',
-      icon: '👥',
+      // icon: '👥',
       color: 'from-purple-400 to-purple-600'
     },
     {
@@ -101,7 +101,7 @@
       value: `₹${data.monthlyEarnings.toLocaleString()}`,
       change: '+18%',
       changeType: 'positive',
-      icon: '💰',
+      // icon: '💰',
       color: 'from-green-400 to-green-600'
     },
     {
@@ -109,7 +109,7 @@
       value: data.onlineDevices.toLocaleString(),
       change: '-2%',
       changeType: 'negative',
-      icon: '📶',
+      // icon: '📶',
       color: 'from-indigo-400 to-indigo-600'
     }
   ];
@@ -142,9 +142,9 @@
           in:fly={{ y: 30, delay: 300 + (i * 100) }}
         >
           <div class="card-header">
-            <div class="card-icon bg-gradient-to-br {metric.color}">
+            <!-- <div class="card-icon bg-gradient-to-br {metric.color}">
               {metric.icon}
-            </div>
+            </div> -->
             <span class="card-change" class:positive={metric.changeType === 'positive'} class:negative={metric.changeType === 'negative'}>
               {metric.change}
             </span>
@@ -242,7 +242,6 @@
     margin: 0;
     padding: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
   }
 
@@ -275,7 +274,7 @@
   .welcome-section h1 {
     font-size: 2.5rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #000000, rgb(16, 10, 21));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin: 0 0 0.5rem 0;
@@ -325,7 +324,6 @@
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(135deg, #667eea, #764ba2);
   }
 
   .card-header {
@@ -431,7 +429,7 @@
   }
 
   .control-btn.active {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: linear-gradient(135deg, #667eea);
     color: white;
     border-color: transparent;
   }

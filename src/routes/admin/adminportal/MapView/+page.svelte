@@ -444,7 +444,7 @@ animationFrame = requestAnimationFrame(animateDotPulse);
   <!-- Statistics Cards -->
   <div class="stats-grid">
     <div class="stat-card">
-      <div class="stat-icon">🏢</div>
+      <!-- <div class="stat-icon">🏢</div> -->
       <div class="stat-info">
         <div class="stat-number">{stats.totalGateways}</div>
         <div class="stat-label">Total Gateways</div>
@@ -453,7 +453,7 @@ animationFrame = requestAnimationFrame(animateDotPulse);
     </div>
     
     <div class="stat-card">
-      <div class="stat-icon">📱</div>
+      <!-- <div class="stat-icon">📱</div> -->
       <div class="stat-info">
         <div class="stat-number">{stats.totalDevices}</div>
         <div class="stat-label">Total Devices</div>
@@ -462,7 +462,7 @@ animationFrame = requestAnimationFrame(animateDotPulse);
     </div>
 
     <div class="stat-card">
-      <div class="stat-icon">📊</div>
+      <!-- <div class="stat-icon">📊</div> -->
       <div class="stat-info">
         <div class="stat-number">{stats.totalDevices > 0 ? Math.round((stats.onlineDevices / stats.totalDevices) * 100) : 0}%</div>
         <div class="stat-label">Online Rate</div>
