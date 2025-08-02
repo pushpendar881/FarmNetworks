@@ -26,13 +26,8 @@
             datasets: [{
               label: 'Devices',
               data: data.monthlyGrowth.map(d => d.value),
-              backgroundColor: function(context) {
-                const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
-                gradient.addColorStop(0,'#667eea');
-                // gradient.addColorStop(1, '#764ba2');
-                return gradient;
-              },
-              borderRadius: 8,
+              backgroundColor: '#3b82f6',
+              borderRadius: 4,
               borderSkipped: false,
             }]
           },
@@ -85,32 +80,32 @@
       value: data.totalDevices.toLocaleString(),
       change: '+12%',
       changeType: 'positive',
-      // icon: '📱',
-      color: 'from-blue-400 to-blue-600'
+      icon: '📱',
+      subtitle: 'from last month'
     },
     {
       title: 'Active Masters',
       value: data.activeMasters,
       change: '+3%',
       changeType: 'positive',
-      // icon: '👥',
-      color: 'from-purple-400 to-purple-600'
+      icon: '👥',
+      subtitle: 'from last month'
     },
     {
       title: 'Monthly Earnings',
       value: `₹${data.monthlyEarnings.toLocaleString()}`,
       change: '+18%',
       changeType: 'positive',
-      // icon: '💰',
-      color: 'from-green-400 to-green-600'
+      icon: '💰',
+      subtitle: 'from last month'
     },
     {
       title: 'Online Devices',
       value: data.onlineDevices.toLocaleString(),
       change: '-2%',
       changeType: 'negative',
-      // icon: '📶',
-      color: 'from-indigo-400 to-indigo-600'
+      icon: '📶',
+      subtitle: 'from last month'
     }
   ];
 </script>
@@ -126,11 +121,16 @@
     <div class="header" in:fade={{ delay: 200 }}>
       <div class="welcome-section">
         <h1>Dashboard Overview</h1>
-        <p>Welcome back, Admin</p>
       </div>
       <div class="last-updated">
-        <p><strong>Last updated:</strong></p>
-        <p>{new Date().toLocaleString()}</p>
+        <p>Last updated: {new Date().toLocaleString('en-US', { 
+          month: 'numeric', 
+          day: 'numeric', 
+          year: 'numeric', 
+          hour: 'numeric', 
+          minute: '2-digit', 
+          hour12: true 
+        })}</p>
       </div>
     </div>
 
@@ -142,15 +142,16 @@
           in:fly={{ y: 30, delay: 300 + (i * 100) }}
         >
           <div class="card-header">
-            <!-- <div class="card-icon bg-gradient-to-br {metric.color}">
+            <div class="card-icon">
               {metric.icon}
-            </div> -->
+            </div>
             <span class="card-change" class:positive={metric.changeType === 'positive'} class:negative={metric.changeType === 'negative'}>
               {metric.change}
             </span>
           </div>
           <div class="card-value">{metric.value}</div>
           <div class="card-label">{metric.title}</div>
+          <div class="card-subtitle">{metric.subtitle}</div>
         </div>
       {/each}
     </div>
@@ -162,7 +163,6 @@
         <div class="chart-header">
           <div>
             <h3>Monthly Growth</h3>
-            <p>Device count progression over time</p>
           </div>
           <div class="chart-controls">
             <button class="control-btn active">6M</button>
@@ -179,7 +179,6 @@
         <div class="chart-header">
           <div>
             <h3>Device Status</h3>
-            <p>Real-time connectivity</p>
           </div>
         </div>
         <div class="chart-canvas status-chart">
@@ -188,13 +187,11 @@
         <div class="device-status-legend">
           <div class="legend-item">
             <div class="legend-indicator online"></div>
-            <span class="legend-label">Online</span>
-            <span class="legend-value">{data.onlineDevices}</span>
+            <span class="legend-label">Online: {data.onlineDevices}</span>
           </div>
           <div class="legend-item">
             <div class="legend-indicator offline"></div>
-            <span class="legend-label">Offline</span>
-            <span class="legend-value">{data.offlineDevices}</span>
+            <span class="legend-label">Offline: {data.offlineDevices}</span>
           </div>
         </div>
       </div>
@@ -205,7 +202,6 @@
       <div class="alerts-header">
         <div>
           <h3>Recent Alerts</h3>
-          <p>Monitor system notifications and warnings</p>
         </div>
         <button class="view-all-btn">View All</button>
       </div>
@@ -241,8 +237,9 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100vh;
+    background-color: #f8fafc;
   }
 
   .dashboard-container {
@@ -253,102 +250,73 @@
   /* Main Content */
   .main-content {
     flex: 1;
-    padding: 2rem;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
+    padding: 24px;
+    background-color: #f8fafc;
   }
 
   .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 3rem;
-    padding: 2rem;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin-bottom: 24px;
   }
 
   .welcome-section h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #000000, rgb(16, 10, 21));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin: 0 0 0.5rem 0;
-  }
-
-  .welcome-section p {
-    color: #6b7280;
-    font-size: 1.1rem;
+    font-size: 24px;
+    font-weight: 600;
+    color: #1f2937;
     margin: 0;
   }
 
-  .last-updated {
-    text-align: right;
-    font-size: 0.9rem;
+  .last-updated p {
     color: #6b7280;
+    font-size: 14px;
+    margin: 0;
   }
 
   /* Dashboard Cards */
   .dashboard-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 2rem;
-    margin-bottom: 3rem;
+    gap: 20px;
+    margin-bottom: 24px;
   }
 
   .card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
   }
 
   .card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
-  }
-
-  .card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
   .card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 12px;
   }
 
   .card-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 15px;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background-color: #e0e7ff;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.5rem;
-    color: white;
+    font-size: 20px;
   }
 
   .card-change {
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
   }
 
   .card-change.positive {
@@ -362,108 +330,102 @@
   }
 
   .card-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    background: linear-gradient(135deg, #1a202c, #2d3748);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-size: 28px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 4px;
   }
 
   .card-label {
-    color: #6b7280;
+    color: #374151;
     font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 2px;
+  }
+
+  .card-subtitle {
+    color: #9ca3af;
+    font-size: 12px;
   }
 
   /* Charts Section */
   .charts-section {
     display: grid;
     grid-template-columns: 2fr 1fr;
-    gap: 2rem;
-    margin-bottom: 3rem;
+    gap: 20px;
+    margin-bottom: 24px;
   }
 
   .chart-container {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
   }
 
   .chart-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
+    align-items: center;
+    margin-bottom: 20px;
   }
 
   .chart-header h3 {
-    font-size: 1.5rem;
+    font-size: 16px;
     font-weight: 600;
-    margin: 0 0 0.5rem 0;
-    color: #1a202c;
-  }
-
-  .chart-header p {
-    color: #6b7280;
     margin: 0;
-    font-size: 0.9rem;
+    color: #1f2937;
   }
 
   .chart-controls {
     display: flex;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .control-btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid #e5e7eb;
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
     background: white;
-    border-radius: 8px;
-    font-size: 0.8rem;
+    border-radius: 4px;
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
+    color: #6b7280;
   }
 
   .control-btn.active {
-    background: linear-gradient(135deg, #667eea);
+    background: #3b82f6;
     color: white;
-    border-color: transparent;
+    border-color: #3b82f6;
   }
 
   .chart-canvas {
     position: relative;
-    height: 300px;
+    height: 250px;
   }
 
   .status-chart {
-    height: 200px;
+    height: 180px;
   }
 
   .device-status-legend {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: 1.5rem;
+    gap: 12px;
+    margin-top: 20px;
   }
 
   .legend-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem;
-    background: rgba(102, 126, 234, 0.05);
-    border-radius: 10px;
   }
 
   .legend-indicator {
-    width: 12px;
-    height: 12px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    margin-right: 0.75rem;
+    margin-right: 8px;
   }
 
   .legend-indicator.online {
@@ -475,60 +437,46 @@
   }
 
   .legend-label {
-    flex: 1;
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .legend-value {
-    font-weight: 600;
-    color: #1a202c;
+    font-size: 14px;
+    color: #6b7280;
   }
 
   /* Alerts Section */
   .alerts-section {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    border: 1px solid #e5e7eb;
   }
 
   .alerts-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 2rem;
+    align-items: center;
+    margin-bottom: 16px;
   }
 
   .alerts-header h3 {
-    font-size: 1.5rem;
+    font-size: 16px;
     font-weight: 600;
-    margin: 0 0 0.5rem 0;
-    color: #1a202c;
-  }
-
-  .alerts-header p {
-    color: #6b7280;
     margin: 0;
-    font-size: 0.9rem;
+    color: #1f2937;
   }
 
   .view-all-btn {
-    background: linear-gradient(135deg, #667eea, #764ba2);
+    background: #3b82f6;
     color: white;
     border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 25px;
+    padding: 6px 12px;
+    border-radius: 4px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    font-size: 12px;
   }
 
   .view-all-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    background: #2563eb;
   }
 
   .alerts-list {
@@ -538,17 +486,16 @@
   .alert-item {
     display: flex;
     align-items: center;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 15px;
-    border-left: 4px solid #f59e0b;
-    transition: all 0.3s ease;
+    padding: 12px;
+    margin-bottom: 8px;
+    background: #f9fafb;
+    border-radius: 6px;
+    border-left: 3px solid #f59e0b;
+    transition: all 0.2s ease;
   }
 
   .alert-item:hover {
-    transform: translateX(5px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    background: #f3f4f6;
   }
 
   .alert-item.warning {
@@ -564,9 +511,9 @@
   }
 
   .alert-icon {
-    font-size: 1.5rem;
-    margin-right: 1rem;
-    width: 40px;
+    font-size: 16px;
+    margin-right: 12px;
+    width: 24px;
     text-align: center;
   }
 
@@ -575,60 +522,20 @@
   }
 
   .alert-id {
-    font-weight: 600;
-    color: #1a202c;
-    margin-bottom: 0.25rem;
+    font-weight: 500;
+    color: #1f2937;
+    margin-bottom: 2px;
+    font-size: 14px;
   }
 
   .alert-message {
     color: #6b7280;
-    font-size: 0.9rem;
+    font-size: 12px;
   }
 
   .alert-time {
     color: #9ca3af;
-    font-size: 0.8rem;
-  }
-
-  /* Utility Classes */
-  .bg-gradient-to-br {
-    background-image: linear-gradient(to bottom right, var(--tw-gradient-stops));
-  }
-
-  .from-blue-400 {
-    --tw-gradient-from: #60a5fa;
-    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(96, 165, 250, 0));
-  }
-
-  .to-blue-600 {
-    --tw-gradient-to: #2563eb;
-  }
-
-  .from-purple-400 {
-    --tw-gradient-from: #a78bfa;
-    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(167, 139, 250, 0));
-  }
-
-  .to-purple-600 {
-    --tw-gradient-to: #9333ea;
-  }
-
-  .from-green-400 {
-    --tw-gradient-from: #4ade80;
-    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(74, 222, 128, 0));
-  }
-
-  .to-green-600 {
-    --tw-gradient-to: #16a34a;
-  }
-
-  .from-indigo-400 {
-    --tw-gradient-from: #818cf8;
-    --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(129, 140, 248, 0));
-  }
-
-  .to-indigo-600 {
-    --tw-gradient-to: #4f46e5;
+    font-size: 12px;
   }
 
   /* Responsive Design */
@@ -644,12 +551,12 @@
 
   @media (max-width: 768px) {
     .main-content {
-      padding: 1rem;
+      padding: 16px;
     }
     
     .header {
       flex-direction: column;
-      gap: 1rem;
+      gap: 12px;
       text-align: center;
     }
     

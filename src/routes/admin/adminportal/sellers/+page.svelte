@@ -726,8 +726,8 @@
 
 <style>
   .dashboard-content {
-    padding: 30px 40px;
-    max-width: 1400px;
+    padding: 20px 40px;
+    max-width: 1600px;
     margin: 0 auto;
   }
 
@@ -735,10 +735,10 @@
     display: flex;
     gap: 15px;
     align-items: end;
-    margin-bottom: 30px;
+    margin-bottom: 25px;
     padding: 20px;
     background: white;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     flex-wrap: wrap;
   }
@@ -750,7 +750,7 @@
   }
 
   .filter-label {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
   }
@@ -768,11 +768,11 @@
   }
 
   .search-input input {
-    padding: 10px 12px 10px 35px;
+    padding: 8px 10px 8px 30px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 14px;
-    width: 300px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 280px;
   }
 
   .search-input input:focus {
@@ -782,13 +782,13 @@
   }
 
   select {
-    padding: 10px;
+    padding: 8px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 14px;
+    border-radius: 6px;
+    font-size: 13px;
     background: white;
     cursor: pointer;
-    min-width: 150px;
+    min-width: 140px;
   }
 
   select:focus {
@@ -801,16 +801,16 @@
     background: #3b82f6;
     color: white;
     border: none;
-    padding: 10px 15px;
-    border-radius: 8px;
+    padding: 6px 10px;
+    border-radius: 5px;
     cursor: pointer;
     font-weight: 500;
     transition: all 0.2s;
-    font-size: 14px;
+    font-size: 12px;
   }
 
   .refresh-btn {
-    padding: 10px;
+    padding: 6px;
     min-width: auto;
   }
 
@@ -828,15 +828,15 @@
 
   .stats-section {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 20px;
-    margin-bottom: 30px;
+    margin-bottom: 25px;
   }
 
   .stat-card {
     background: white;
-    padding: 25px;
-    border-radius: 12px;
+    padding: 22px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     transition: transform 0.2s;
     border: 1px solid #f1f5f9;
@@ -846,11 +846,11 @@
     transform: translateY(-2px);
   }
 
-  .stat-card.approved {
-    border-left: 4px solid #10B981;
-  }
+  /* .stat-card.approved {
+    border-left: 4px solid #dedede;
+  } */
 
-  .stat-card.warning {
+  /* .stat-card.warning {
     border-left: 4px solid #F59E0B;
   }
 
@@ -864,21 +864,21 @@
 
   .stat-card.pending {
     border-left: 4px solid #EF4444;
-  }
+  } */
 
   .stat-content {
     text-align: center;
   }
 
   .stat-label {
-    font-size: 14px;
+    font-size: 13px;
     color: #6b7280;
     margin-bottom: 8px;
     font-weight: 500;
   }
 
   .stat-value {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     color: #1f2937;
     margin-bottom: 8px;
@@ -892,8 +892,8 @@
   .charts-section {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 30px;
-    margin-bottom: 30px;
+    gap: 25px;
+    margin-bottom: 25px;
   }
 
   .chart-container {
@@ -935,7 +935,7 @@
 
   .table-section {
     background: white;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     overflow: hidden;
   }
@@ -960,7 +960,7 @@
   .sellers-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .sellers-table thead {
@@ -979,7 +979,7 @@
   }
 
   .sellers-table td {
-    padding: 20px 12px;
+    padding: 18px 12px;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: top;
   }
@@ -1086,7 +1086,7 @@
   .gateway-count, .device-count {
     font-weight: 600;
     color: #1f2937;
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .active-gateways, .online-devices {
@@ -1169,10 +1169,10 @@
   }
 
   .view-details-btn, .approve-btn {
-    padding: 6px 12px;
+    padding: 5px 10px;
     border: none;
-    border-radius: 6px;
-    font-size: 12px;
+    border-radius: 5px;
+    font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s;

@@ -52,3 +52,53 @@ export const authHelpers = {
     return !!session?.user;
   }
 };
+export const realtimeConfig = {
+  heartbeatIntervalMs: 30000,
+  reconnectAfterMs: (tries) => Math.min(tries * 1000, 30000),
+  logger: console.log,
+  encode: (payload, callback) => {
+    return callback(JSON.stringify(payload))
+  },
+  decode: (payload, callback) => {
+    return callback(JSON.parse(payload))
+  }
+}
+
+// Helper function to handle Supabase errors
+export function handleSupabaseError(error, operation = 'database operation') {
+  console.error(`Error during ${operation}:`, error)
+  
+  if (error?.message) {
+    return {
+      success: false,
+      error: error.message,
+      details: error
+    }
+  }
+  
+  return {
+    success: false,
+    error: `Unknown error during ${operation}`,
+    details: error
+  }
+}
+
+// Helper function for pagination
+export function getPaginationParams(page = 1, limit = 10) {
+  const from = (page - 1) * limit
+  const to = from + limit - 1
+  
+  return { from, to }
+}
+
+// Helper function to format database timestamps
+export function formatTimestamp(timestamp) {
+  if (!timestamp) return null
+  
+  try {
+    return new Date(timestamp).toISOString()
+  } catch (error) {
+    console.error('Invalid timestamp format:', timestamp)
+    return null
+  }
+}
