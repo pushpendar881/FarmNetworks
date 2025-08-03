@@ -301,7 +301,7 @@
     </div>
 
     <!-- Gateway Management Link -->
-    <div class="bg-white rounded-lg shadow p-6 mb-8">
+    <!-- <div class="bg-white rounded-lg shadow p-6 mb-8">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Gateway Management</h3>
       <div class="text-center">
         <p class="text-gray-600 mb-4">Manage your IoT gateways, block/unblock devices, and monitor network status.</p>
@@ -312,7 +312,7 @@
           Manage Gateways
         </a>
       </div>
-    </div>
+    </div> -->
 
     <!-- Recent Alerts -->
     <!-- <div class="bg-white rounded-lg shadow">

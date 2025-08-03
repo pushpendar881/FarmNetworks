@@ -357,11 +357,11 @@
                 <td class="actions-cell">
                   {#if gateway.status === 'active'}
                     <button class="block-btn" on:click={() => blockGateway(gateway.id)}>
-                      🚫 Block
+                      🚫 Inactive   
                     </button>
                   {:else if gateway.status === 'inactive'}
                     <button class="unblock-btn" on:click={() => unblockGateway(gateway.id)}>
-                      ✅ Unblock
+                      ✅ Active
                     </button>
                   {:else}
                     <button class="maintenance-btn" disabled>

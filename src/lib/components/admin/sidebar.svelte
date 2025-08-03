@@ -77,9 +77,11 @@
     }
   }
 
+  import { adminAuthStore } from '$lib/stores/adminAuth.js';
+
   // Handle logout
-  function handleLogout() {
-      goto('/admin/auth/login');
+  async function handleLogout() {
+      await adminAuthStore.adminSignOut();
       
       // Close mobile sidebar after logout
       if (isMobile) {

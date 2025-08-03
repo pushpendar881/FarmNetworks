@@ -1,5 +1,5 @@
 <script>
-  import { authStore, loading } from '$lib/stores/auth.js';
+  import { adminAuthStore, adminLoading } from '$lib/stores/adminAuth.js';
   import { addToast } from '$lib/stores/toast.js';
   import { goto } from '$app/navigation';
   import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
@@ -60,38 +60,33 @@
     isSubmitting = true;
 
     try {
-      const result = await authStore.signIn(formData.email, formData.password);
+      const result = await adminAuthStore.adminSignIn(formData.email, formData.password);
 
       if (result.success) {
-        // Check if user is admin
-        if (result.role === 'admin') {
-          addToast('Welcome back, Admin!', 'success');
-          
-          // Store remember me preference in localStorage
-          if (rememberMe) {
-            localStorage.setItem('adminRememberMe', 'true');
-          } else {
-            localStorage.removeItem('adminRememberMe');
-          }
-          
-          goto('/admin/dashboard');
+        addToast('Welcome back, Admin!', 'success');
+        
+        // Store remember me preference in localStorage
+        if (rememberMe) {
+          localStorage.setItem('adminRememberMe', 'true');
         } else {
-          errorMessage = 'Access denied. Admin privileges required.';
-           await authStore.signOut();
+          localStorage.removeItem('adminRememberMe');
         }
+        
+        goto('/admin/adminportal/dashboard');
       } else {
         // Handle specific error cases
         if (result.code === 'INVALID_CREDENTIALS') {
           errorMessage = 'Invalid email or password.';
         } else if (result.code === 'EMAIL_NOT_CONFIRMED') {
           errorMessage = 'Please confirm your email before logging in.';
-          goto('/admin/auth/confirm-email');
+        } else if (result.code === 'NOT_ADMIN') {
+          errorMessage = 'Access denied. Admin privileges required.';
         } else {
           errorMessage = result.error || 'Login failed';
         }
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Admin login error:', error);
       errorMessage = 'An unexpected error occurred. Please try again.';
     } finally {
       isSubmitting = false;
@@ -117,7 +112,7 @@
     <button 
       on:click={navigateBack}
       class="mb-8 flex items-center text-gray-600 hover:text-gray-800 transition-colors duration-200"
-      disabled={$loading}
+      disabled={$adminLoading}
     >
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -174,7 +169,7 @@
               bind:value={formData.email}
               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 {errors.email ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : ''}"
               required
-              disabled={$loading || isSubmitting}
+              disabled={$adminLoading || isSubmitting}
               autocomplete="username"
             />
             {#if errors.email}
@@ -195,14 +190,14 @@
                 bind:value={formData.password}
                 class="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 {errors.password ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : ''}"
                 required
-                disabled={$loading || isSubmitting}
+                disabled={$adminLoading || isSubmitting}
                 autocomplete={rememberMe ? 'current-password' : 'off'}
               />
               <button
                 type="button"
                 on:click={togglePasswordVisibility}
                 class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                disabled={$loading || isSubmitting}
+                disabled={$adminLoading || isSubmitting}
                 tabindex="-1"
               >
                 {#if showPassword}
@@ -230,7 +225,7 @@
                 type="checkbox"
                 bind:checked={rememberMe}
                 class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                disabled={$loading || isSubmitting}
+                disabled={$adminLoading || isSubmitting}
               />
               <label for="rememberMe" class="ml-2 text-sm text-gray-700">
                 Remember me
@@ -244,10 +239,10 @@
           <!-- Submit Button -->
           <button
             type="submit"
-            disabled={isSubmitting || $loading || !formData.email || !formData.password}
+            disabled={isSubmitting || $adminLoading || !formData.email || !formData.password}
             class="w-full bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
           >
-            {#if isSubmitting || $loading}
+            {#if isSubmitting || $adminLoading}
               <div class="flex items-center justify-center">
                 <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

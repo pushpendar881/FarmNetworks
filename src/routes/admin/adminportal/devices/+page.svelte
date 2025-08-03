@@ -16,32 +16,37 @@
   let statusFilter = 'all';
   let gatewayFilter = 'all';
   let deviceTypeFilter = 'all';
-  let showMoreFilters = false;
+let blockedFilter = 'all';
+let showMoreFilters = false;
 
   // Calculate stats
   $: totalDevices = devices.length;
   $: onlineDevices = devices.filter(d => d.motor_status === 1).length;
   $: offlineDevices = devices.filter(d => d.motor_status === 0).length;
   $: expiringDevices = subscriptions.filter(sub => {
-    const expiryDate = new Date(sub.valid_until);
-    const now = new Date();
-    const daysUntilExpiry = (expiryDate - now) / (1000 * 60 * 60 * 24);
-    return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
-  }).length;
+  const expiryDate = new Date(sub.valid_until);
+  const now = new Date();
+  const daysUntilExpiry = (expiryDate - now) / (1000 * 60 * 60 * 24);
+  return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
+}).length;
+$: blockedDevices = devices.filter(d => d.is_blocked === true).length;
 
   // Filter devices
   $: filteredDevices = devices.filter(device => {
-    const matchesSearch = device.device_id?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         device.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         device.farm_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'online' && device.motor_status === 1) ||
-                         (statusFilter === 'offline' && device.motor_status === 0);
-    const matchesGateway = gatewayFilter === 'all' || device.gateway_id === gatewayFilter;
-    const matchesType = deviceTypeFilter === 'all' || device.device_type === deviceTypeFilter;
-    
-    return matchesSearch && matchesStatus && matchesGateway && matchesType;
-  });
+  const matchesSearch = device.device_id?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                       device.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       device.farm_name?.toLowerCase().includes(searchTerm.toLowerCase());
+  const matchesStatus = statusFilter === 'all' || 
+                       (statusFilter === 'online' && device.motor_status === 1) ||
+                       (statusFilter === 'offline' && device.motor_status === 0);
+  const matchesGateway = gatewayFilter === 'all' || device.gateway_id === gatewayFilter;
+  const matchesType = deviceTypeFilter === 'all' || device.device_type === deviceTypeFilter;
+  const matchesBlocked = blockedFilter === 'all' || 
+                        (blockedFilter === 'blocked' && device.is_blocked === true) ||
+                        (blockedFilter === 'active' && device.is_blocked !== true);
+  
+  return matchesSearch && matchesStatus && matchesGateway && matchesType && matchesBlocked;
+});
 
   // Get gateway name by ID
   function getGatewayName(gatewayId) {
@@ -129,8 +134,30 @@
   }
 
   function toggleMoreFilters() {
-    showMoreFilters = !showMoreFilters;
+  showMoreFilters = !showMoreFilters;
+}
+
+async function blockDevice(deviceId, block = true) {
+  try {
+    const { error } = await supabase
+      .from('devices')
+      .update({ 
+        is_blocked: block, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', deviceId);
+      
+    if (error) throw error;
+    
+    // Refresh devices data
+    await fetchDevices();
+    
+    alert(`Device ${block ? 'blocked' : 'unblocked'} successfully`);
+  } catch (error) {
+    console.error('Error updating device:', error);
+    alert(`Failed to ${block ? 'block' : 'unblock'} device`);
   }
+}
 
   onMount(() => {
     fetchDevices();
@@ -201,6 +228,15 @@
         <option value="gateway">Gateway</option>
       </select>
     </div>
+    
+    <div class="dropdown-filter">
+      <span class="filter-label">Block Status</span>
+      <select bind:value={blockedFilter}>
+        <option value="all">All Devices</option>
+        <option value="active">Active</option>
+        <option value="blocked">Blocked</option>
+      </select>
+    </div>
 
     <!-- <button class="more-filters-btn" on:click={toggleMoreFilters}>
       🔽 More Filters
@@ -232,12 +268,17 @@
         <div class="stat-value">{offlineDevices}</div>
       </div>
     </div>
-
     <div class="stat-card warning">
-      <!-- <div class="stat-icon">⚠️</div> -->
       <div class="stat-content">
         <div class="stat-label">Expiring Soon</div>
         <div class="stat-value">{expiringDevices}</div>
+      </div>
+    </div>
+    
+    <div class="stat-card blocked">
+      <div class="stat-content">
+        <div class="stat-label">Blocked</div>
+        <div class="stat-value">{blockedDevices}</div>
       </div>
     </div>
   </div>
@@ -269,7 +310,7 @@
               <th>STATUS</th>
               <th>LAST ACTIVE</th>
               <th>SUBSCRIPTION</th>
-              <!-- <th>ACTIONS</th> -->
+              <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -333,11 +374,20 @@
                     {/if}
                   </div>
                 </td>
-                <!-- <td class="actions-cell">
-                  <button class="view-details-btn" on:click={() => viewDetails(device.device_id)}>
-                    👁️ View Details
-                  </button>
-                </td> -->
+                <td class="actions-cell">
+                  <div class="device-actions">
+                    {#if device.is_blocked}
+                      <div class="blocked-indicator">🚫 BLOCKED</div>
+                      <button class="unblock-btn" on:click={() => blockDevice(device.id, false)}>
+                        ✅ Unblock
+                      </button>
+                    {:else}
+                      <button class="block-btn" on:click={() => blockDevice(device.id, true)}>
+                        🚫 Block
+                      </button>
+                    {/if}
+                  </div>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -525,11 +575,11 @@
 
   /* Stats Section */
   .stats-section {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-  }
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
 
   .stat-card {
     background: white;
@@ -562,8 +612,58 @@
   }
 
   .stat-card.warning .stat-icon {
-    background: #fef3c7;
-  }
+  background: #fef3c7;
+}
+
+.stat-card.blocked .stat-icon {
+  background: #fecaca;
+}
+
+.device-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.blocked-indicator {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.block-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.block-btn:hover {
+  background: #dc2626;
+}
+
+.unblock-btn {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.unblock-btn:hover {
+  background: #059669;
+}
 
   .stat-content {
     flex: 1;
