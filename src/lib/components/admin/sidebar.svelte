@@ -395,7 +395,7 @@
   }
 
   .nav-item.active {
-      background: linear-gradient(135deg, #667eea, #764ba2);
+      background: linear-gradient(135deg, #667eea, #667eea);
       color: white;
       transform: translateX(8px);
       box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
