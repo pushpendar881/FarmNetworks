@@ -123,216 +123,338 @@ export const authStore = {
   },
 
   // Enhanced Sign In
-  signIn: async (email, password) => {
-    if (!supabase) return { success: false, error: 'Authentication service not available' };
+  // signIn: async (email, password) => {
+  //   if (!supabase) return { success: false, error: 'Authentication service not available' };
     
-    // Client-side validation
-    if (!validateEmail(email)) {
-      return { success: false, error: 'Please enter a valid email address' };
-    }
-    
-    if (!password || password.length < 6) {
-      return { success: false, error: 'Password is required' };
-    }
-    
-    loading.set(true);
-    try {
-      const normalizedEmail = email.trim().toLowerCase();
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password
-      });
-
-      if (error) {
-        switch (error.message) {
-          case 'Invalid login credentials':
-            return { 
-              success: false, 
-              error: 'Email or password is incorrect. Please check your credentials and try again.',
-              code: 'INVALID_CREDENTIALS'
-            };
-          case 'Email not confirmed':
-            return { 
-              success: false, 
-              error: 'Please confirm your email address before signing in.',
-              code: 'EMAIL_NOT_CONFIRMED'
-            };
-          case 'Too many requests':
-            return { 
-              success: false, 
-              error: 'Too many login attempts. Please wait a moment and try again.',
-              code: 'RATE_LIMITED'
-            };
-          default:
-            return { success: false, error: error.message };
-        }
-      }
-
-      const authUser = data.user;
-      const role = authUser?.user_metadata?.user_type || 'user';
-      
-      return { success: true, role, user: authUser };
-    } catch (err) {
-      console.error('Sign in error:', err);
-      return { success: false, error: 'An unexpected error occurred. Please try again.' };
-    } finally {
-      loading.set(false);
-    }
-  },
-
-  // Enhanced Signup Seller with comprehensive validation and dual-table storage
-  // signupSeller: async (formData) => {
-  //   if (!supabase) {
-  //     console.error('Supabase client not initialized');
-  //     return { success: false, error: 'System configuration error' };
+  //   // Client-side validation
+  //   if (!validateEmail(email)) {
+  //     return { success: false, error: 'Please enter a valid email address' };
   //   }
-
-  //   loading.set(true);
     
+  //   if (!password || password.length < 6) {
+  //     return { success: false, error: 'Password is required' };
+  //   }
+    
+  //   loading.set(true);
   //   try {
-  //     console.log('👤 Creating seller account:', formData.email);
-
-  //     // Main signup call with timeout fallback
-  //     let signupResponse;
-  //     try {
-  //       signupResponse = await Promise.race([
-  //         supabase.auth.signUp({
-  //           email: formData.email.trim().toLowerCase(),
-  //           password: formData.password,
-  //           options: {
-  //             data: {
-  //               user_type: 'seller',
-  //               full_name: formData.fullName.trim(),
-  //               business_name: formData.businessName?.trim() || '',
-  //               phone: formData.phone?.trim() || '',
-  //               address: formData.address?.trim() || '',
-  //               city: formData.city?.trim() || '',
-  //               state: formData.state?.trim() || '',
-  //               pincode: formData.pincode?.trim() || ''
-  //             },
-  //             emailRedirectTo: `${window.location.origin}seller/auth/login`
-  //           }
-  //         }),
-  //         new Promise((_, reject) => 
-  //           setTimeout(() => reject(new Error('Signup timeout')), 10000)
-  //         )
-  //       ]);
-  //     } catch (timeoutError) {
-  //       console.error('Signup timeout:', timeoutError);
-  //       return {
-  //         success: false,
-  //         error: 'Signup process took too long. Please try again.'
-  //       };
-  //     }
-
-  //     const { data, error } = signupResponse;
-  //     console.log('Seller signup response:', { 
-  //       userId: data?.user?.id,
-  //       needsConfirmation: !data?.session,
-  //       error: error?.message 
+  //     const normalizedEmail = email.trim().toLowerCase();
+      
+  //     const { data, error } = await supabase.auth.signInWithPassword({
+  //       email: normalizedEmail,
+  //       password
   //     });
 
-  //     // Handle known error cases
   //     if (error) {
-  //       if (error.message.includes('User already registered')) {
-  //         return {
-  //           success: false,
-  //           error: 'This email is already registered. Please sign in instead.',
-  //           code: 'EMAIL_EXISTS'
-  //         };
-  //       }
-  //       if (error.message.includes('duplicates')) {
-  //         return {
-  //           success: false,
-  //           error: 'Account creation failed due to system error. Our team has been notified.',
-  //           code: 'AUTH_SYSTEM_ERROR',
-  //           requiresSupport: true
-  //         };
-  //       }
-  //       return {
-  //         success: false,
-  //         error: error.message || 'Account creation failed',
-  //         code: 'AUTH_ERROR'
-  //       };
-  //     }
-
-  //     // If signup successful and we have a user, create profiles in both tables
-  //     if (data?.user) {
-  //       const userId = data.user.id;
-        
-  //       try {
-  //         // Create user_profile record
-  //         const userProfileData = {
-  //           id: userId,
-  //           email: formData.email.trim().toLowerCase(),
-  //           full_name: formData.fullName.trim(),
-  //           phone: formData.phone?.trim() || null,
-  //           role: 'seller',
-  //           is_active: true
-  //         };
-
-  //         const { error: userProfileError } = await supabase
-  //           .from('user_profiles')
-  //           .insert([userProfileData]);
-
-  //         if (userProfileError) {
-  //           console.error('Error creating user profile:', userProfileError);
-  //           // Don't fail the signup, but log the error
-  //         }
-
-  //         // Create seller_profile record
-  //         const sellerProfileData = {
-  //           id: userId,
-  //           business_name: formData.businessName?.trim() || '',
-  //           business_type: null,
-  //           address: formData.address?.trim() || null,
-  //           city: formData.city?.trim() || null,
-  //           state: formData.state?.trim() || null,
-  //           pincode: formData.pincode?.trim() || null,
-  //           gstin: null,
-  //           total_sales: 0.00,
-  //           is_approved: false
-  //         };
-
-  //         const { error: sellerProfileError } = await supabase
-  //           .from('seller_profiles')
-  //           .insert([sellerProfileData]);
-
-  //         if (sellerProfileError) {
-  //           console.error('Error creating seller profile:', sellerProfileError);
-  //           // Don't fail the signup, but log the error
-  //         }
-
-  //         console.log('✅ Seller profiles created successfully for user:', userId);
-  //       } catch (profileError) {
-  //         console.error('Error creating profiles:', profileError);
-  //         // Don't fail the signup, but log the error
+  //       switch (error.message) {
+  //         case 'Invalid login credentials':
+  //           return { 
+  //             success: false, 
+  //             error: 'Email or password is incorrect. Please check your credentials and try again.',
+  //             code: 'INVALID_CREDENTIALS'
+  //           };
+  //         case 'Email not confirmed':
+  //           return { 
+  //             success: false, 
+  //             error: 'Please confirm your email address before signing in.',
+  //             code: 'EMAIL_NOT_CONFIRMED'
+  //           };
+  //         case 'Too many requests':
+  //           return { 
+  //             success: false, 
+  //             error: 'Too many login attempts. Please wait a moment and try again.',
+  //             code: 'RATE_LIMITED'
+  //           };
+  //         default:
+  //           return { success: false, error: error.message };
   //       }
   //     }
 
-  //     return {
-  //       success: true,
-  //       data,
-  //       needsConfirmation: !data.session,
-  //       message: data.session 
-  //         ? 'Signup successful! Redirecting...' 
-  //         : 'Please check your email to verify your account.'
-  //     };
-
+  //     const authUser = data.user;
+  //     const role = authUser?.user_metadata?.user_type || 'user';
+      
+  //     return { success: true, role, user: authUser };
   //   } catch (err) {
-  //     console.error('Unexpected signup error:', err);
-  //     return {
-  //       success: false,
-  //       error: 'An unexpected error occurred. Our team has been notified.',
-  //       code: 'UNEXPECTED_ERROR',
-  //       requiresSupport: true
-  //     };
+  //     console.error('Sign in error:', err);
+  //     return { success: false, error: 'An unexpected error occurred. Please try again.' };
   //   } finally {
   //     loading.set(false);
   //   }
   // },
-  // Replace your existing signupSeller function with this:
+  // Enhanced Sign In with admin and seller validation
+signIn: async (email, password) => {
+  if (!supabase) return { success: false, error: 'Authentication service not available' };
+  
+  // Client-side validation
+  if (!validateEmail(email)) {
+    return { success: false, error: 'Please enter a valid email address' };
+  }
+  
+  if (!password || password.length < 6) {
+    return { success: false, error: 'Password is required' };
+  }
+  
+  loading.set(true);
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password
+    });
+
+    if (error) {
+      switch (error.message) {
+        case 'Invalid login credentials':
+          return { 
+            success: false, 
+            error: 'Email or password is incorrect. Please check your credentials and try again.',
+            code: 'INVALID_CREDENTIALS'
+          };
+        case 'Email not confirmed':
+          return { 
+            success: false, 
+            error: 'Please confirm your email address before signing in.',
+            code: 'EMAIL_NOT_CONFIRMED'
+          };
+        case 'Too many requests':
+          return { 
+            success: false, 
+            error: 'Too many login attempts. Please wait a moment and try again.',
+            code: 'RATE_LIMITED'
+          };
+        default:
+          return { success: false, error: error.message };
+      }
+    }
+
+    const authUser = data.user;
+    const role = authUser?.user_metadata?.user_type || 'user';
+    
+    // Check if user is seller and validate approval/block status
+    if (role === 'seller') {
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('is_blocked, seller_profiles(approval_status)')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profileData?.is_blocked) {
+        await supabase.auth.signOut();
+        return { success: false, error: 'Your account has been blocked. Contact support.' };
+      }
+
+      const approvalStatus = profileData?.seller_profiles?.approval_status;
+      if (approvalStatus !== 'approved') {
+        await supabase.auth.signOut();
+        switch (approvalStatus) {
+          case 'pending':
+            return { success: false, error: 'Your seller account is pending approval.' };
+          case 'rejected':
+            return { success: false, error: 'Your seller account has been rejected. Contact support.' };
+          case 'blocked':
+            return { success: false, error: 'Your seller account has been blocked. Contact support.' };
+          default:
+            return { success: false, error: 'Your seller account is not approved.' };
+        }
+      }
+    }
+
+    // Check if user is admin and validate block status
+    if (role === 'admin') {
+      // Check if admin profile exists and user is not blocked
+      const { data: adminData } = await supabase
+        .from('admin_profiles')
+        .select('id')
+        .eq('id', authUser.id)
+        .single();
+
+      if (!adminData) {
+        await supabase.auth.signOut();
+        return { success: false, error: 'Admin profile not found. Contact system administrator.' };
+      }
+
+      // Check if admin is blocked in user_profiles (if they also have a user profile)
+      const { data: userProfileData } = await supabase
+        .from('user_profiles')
+        .select('is_blocked')
+        .eq('id', authUser.id)
+        .single();
+
+      if (userProfileData?.is_blocked) {
+        await supabase.auth.signOut();
+        return { success: false, error: 'Your admin account has been blocked.' };
+      }
+    }
+
+    // Check if regular user is blocked
+    if (role === 'user') {
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('is_blocked')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profileData?.is_blocked) {
+        await supabase.auth.signOut();
+        return { success: false, error: 'Your account has been blocked. Contact support.' };
+      }
+    }
+    
+    return { success: true, role, user: authUser };
+  } catch (err) {
+    console.error('Sign in error:', err);
+    return { success: false, error: 'An unexpected error occurred. Please try again.' };
+  } finally {
+    loading.set(false);
+  }
+},
+ 
+// signupSeller: async (formData) => {
+//   if (!supabase) {
+//     console.error('Supabase client not initialized');
+//     return { success: false, error: 'System configuration error' };
+//   }
+
+//   loading.set(true);
+  
+//   try {
+//     console.log('👤 Creating seller account:', formData.email);
+
+//     // Step 1: Create auth user with timeout fallback
+//     let signupResponse;
+//     try {
+//       signupResponse = await Promise.race([
+//         supabase.auth.signUp({
+//           email: formData.email.trim().toLowerCase(),
+//           password: formData.password,
+//           options: {
+//             data: {
+//               user_type: 'seller',
+//               full_name: formData.fullName.trim(),
+//               business_name: formData.businessName?.trim() || '',
+//               phone: formData.phone?.trim() || '',
+//               address: formData.address?.trim() || '',
+//               city: formData.city?.trim() || '',
+//               state: formData.state?.trim() || '',
+//               pincode: formData.pincode?.trim() || ''
+//             },
+//             emailRedirectTo: `${window.location.origin}/seller/auth/login`
+//           }
+//         }),
+//         new Promise((_, reject) => 
+//           setTimeout(() => reject(new Error('Signup timeout')), 10000)
+//         )
+//       ]);
+//     } catch (timeoutError) {
+//       console.error('Signup timeout:', timeoutError);
+//       return {
+//         success: false,
+//         error: 'Signup process took too long. Please try again.'
+//       };
+//     }
+
+//     const { data, error } = signupResponse;
+//     console.log('Seller signup response:', { 
+//       userId: data?.user?.id,
+//       needsConfirmation: !data?.session,
+//       error: error?.message 
+//     });
+
+//     if (error) {
+//       if (error.message.includes('User already registered')) {
+//         return {
+//           success: false,
+//           error: 'This email is already registered. Please sign in instead.',
+//           code: 'EMAIL_EXISTS'
+//         };
+//       }
+//       if (error.message.includes('duplicates')) {
+//         return {
+//           success: false,
+//           error: 'Account creation failed due to system error. Our team has been notified.',
+//           code: 'AUTH_SYSTEM_ERROR',
+//           requiresSupport: true
+//         };
+//       }
+//       return {
+//         success: false,
+//         error: error.message || 'Account creation failed',
+//         code: 'AUTH_ERROR'
+//       };
+//     }
+
+//     const user = data.user;
+//     if (!user) {
+//       return { success: false, error: 'User creation failed' };
+//     }
+
+//     // Step 2: Create user profile
+//     const userProfileData = {
+//       id: user.id,
+//       email: formData.email.trim().toLowerCase(),
+//       full_name: formData.fullName.trim(),
+//       phone: formData.phone?.trim() || null,
+//       role: 'seller',
+//       is_active: true
+//     };
+
+//     const { error: profileError } = await supabase
+//       .from('user_profiles')
+//       .insert([userProfileData]);
+
+//     if (profileError) {
+//       console.error('Error creating user profile:', profileError);
+//       // Don't fail the signup, but log the error
+//     }
+
+//     // Step 3: Create seller profile
+//     const sellerProfileData = {
+//       id: user.id,
+//       business_name: formData.businessName?.trim() || formData.fullName.trim(),
+//       business_type: null,
+//       address: formData.address?.trim() || null,
+//       city: formData.city?.trim() || null,
+//       state: formData.state?.trim() || null,
+//       pincode: formData.pincode?.trim() || null,
+//       gstin: null,
+//       total_sales: 0.00,
+//       is_approved: false
+//     };
+
+//     const { error: sellerError } = await supabase
+//       .from('seller_profiles')
+//       .insert([sellerProfileData]);
+
+//     if (sellerError) {
+//       console.error('Error creating seller profile:', sellerError);
+//       // Don't fail the signup, but log the error
+//     }
+
+//     console.log('✅ Seller profiles created successfully for user:', user.id);
+
+//     return {
+//       success: true,
+//       data,
+//       needsConfirmation: !data.session,
+//       message: data.session 
+//         ? 'Signup successful! Redirecting...' 
+//         : 'Please check your email to verify your account.'
+//     };
+
+//   } catch (err) {
+//     console.error('Unexpected signup error:', err);
+//     return {
+//       success: false,
+//       error: 'An unexpected error occurred. Our team has been notified.',
+//       code: 'UNEXPECTED_ERROR',
+//       requiresSupport: true
+//     };
+//   } finally {
+//     loading.set(false);
+//   }
+// },
+    // Replace your existing signupSeller function with this:
+//Enhanced Sign Out with better cleanup
 
 signupSeller: async (formData) => {
   if (!supabase) {
@@ -432,7 +554,7 @@ signupSeller: async (formData) => {
       // Don't fail the signup, but log the error
     }
 
-    // Step 3: Create seller profile
+    // Step 3: Create seller profile with pending approval status
     const sellerProfileData = {
       id: user.id,
       business_name: formData.businessName?.trim() || formData.fullName.trim(),
@@ -443,7 +565,8 @@ signupSeller: async (formData) => {
       pincode: formData.pincode?.trim() || null,
       gstin: null,
       total_sales: 0.00,
-      is_approved: false
+      is_approved: false,
+      approval_status: 'pending' // Set initial status as pending
     };
 
     const { error: sellerError } = await supabase
@@ -453,6 +576,22 @@ signupSeller: async (formData) => {
     if (sellerError) {
       console.error('Error creating seller profile:', sellerError);
       // Don't fail the signup, but log the error
+    } else {
+      // Step 4: Create admin notification for new seller signup
+      try {
+        await supabase
+          .from('admin_notifications')
+          .insert([{
+            type: 'seller_signup',
+            title: 'New Seller Registration',
+            message: `New seller ${formData.fullName} (${formData.email}) has registered and is awaiting approval.`,
+            related_id: user.id
+          }]);
+        console.log('✅ Admin notification created for new seller signup');
+      } catch (notificationError) {
+        console.error('Error creating admin notification:', notificationError);
+        // Don't fail the signup if notification fails
+      }
     }
 
     console.log('✅ Seller profiles created successfully for user:', user.id);
@@ -462,8 +601,8 @@ signupSeller: async (formData) => {
       data,
       needsConfirmation: !data.session,
       message: data.session 
-        ? 'Signup successful! Redirecting...' 
-        : 'Please check your email to verify your account.'
+        ? 'Signup successful! Your account is pending approval.' 
+        : 'Please check your email to verify your account. Your seller account will be pending approval.'
     };
 
   } catch (err) {
@@ -478,9 +617,8 @@ signupSeller: async (formData) => {
     loading.set(false);
   }
 },
-    // Replace your existing signupSeller function with this:
-//Enhanced Sign Out with better cleanup
-  signOut: async () => {
+
+signOut: async () => {
     if (!supabase) return { success: false, error: 'Authentication service not available' };
     
     loading.set(true);
@@ -923,36 +1061,36 @@ signupSeller: async (formData) => {
     }
   },
   
-  approveSeller: async (sellerId, approved) => {
-    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+  // approveSeller: async (sellerId, approved) => {
+  //   if (!supabase) return { success: false, error: 'Supabase not initialized' };
     
-    try {
-      const updateData = {
-        is_approved: approved,
-        updated_at: new Date().toISOString()
-      };
+  //   try {
+  //     const updateData = {
+  //       is_approved: approved,
+  //       updated_at: new Date().toISOString()
+  //     };
       
-      if (approved) {
-        updateData.approved_at = new Date().toISOString();
-      }
+  //     if (approved) {
+  //       updateData.approved_at = new Date().toISOString();
+  //     }
       
-      const { error } = await supabase
-        .from('seller_profiles')
-        .update(updateData)
-        .eq('id', sellerId);
+  //     const { error } = await supabase
+  //       .from('seller_profiles')
+  //       .update(updateData)
+  //       .eq('id', sellerId);
         
-      if (error) {
-        return { success: false, error: error.message };
-      }
+  //     if (error) {
+  //       return { success: false, error: error.message };
+  //     }
       
-      return { 
-        success: true, 
-        message: approved ? 'Seller approved successfully' : 'Seller rejected successfully' 
-      };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  },
+  //     return { 
+  //       success: true, 
+  //       message: approved ? 'Seller approved successfully' : 'Seller rejected successfully' 
+  //     };
+  //   } catch (err) {
+  //     return { success: false, error: err.message };
+  //   }
+  // },
 
   // Update current user's seller profile
   updateCurrentSellerProfile: async (updateData) => {
@@ -1110,5 +1248,204 @@ signupSeller: async (formData) => {
     } catch (err) {
       return { success: false, error: err.message };
     }
-  }
+  },
+  approveSellerStatus: async (sellerId, status) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const updateData = {
+        approval_status: status,
+        updated_at: new Date().toISOString()
+      };
+      
+      if (status === 'approved') {
+        updateData.is_approved = true;
+        updateData.approved_at = new Date().toISOString();
+      } else {
+        updateData.is_approved = false;
+      }
+      
+      const { error } = await supabase
+        .from('seller_profiles')
+        .update(updateData)
+        .eq('id', sellerId);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        message: `Seller ${status} successfully` 
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Block or unblock user
+  blockUser: async (userId, blocked = true) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ 
+          is_blocked: blocked, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        message: `User ${blocked ? 'blocked' : 'unblocked'} successfully` 
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Block or unblock device
+  blockDevice: async (deviceId, blocked = true) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .update({ 
+          is_blocked: blocked, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', deviceId);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        message: `Device ${blocked ? 'blocked' : 'unblocked'} successfully` 
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Get all admin notifications
+  getAdminNotifications: async (options = {}) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const {
+        limit = 50,
+        offset = 0,
+        unreadOnly = false
+      } = options;
+      
+      let query = supabase
+        .from('admin_notifications')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (unreadOnly) {
+        query = query.eq('is_read', false);
+      }
+      
+      if (limit) {
+        query = query.range(offset, offset + limit - 1);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { 
+        success: true, 
+        notifications: data || [] 
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Mark notification as read
+  markNotificationRead: async (notificationId) => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const { error } = await supabase
+        .from('admin_notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Mark all notifications as read
+  markAllNotificationsRead: async () => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const { error } = await supabase
+        .from('admin_notifications')
+        .update({ is_read: true })
+        .eq('is_read', false);
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+  
+  // Get pending sellers for approval
+  getPendingSellers: async () => {
+    if (!supabase) return { success: false, error: 'Supabase not initialized' };
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select(`
+          *,
+          seller_profiles (*)
+        `)
+        .eq('role', 'seller')
+        .eq('seller_profiles.approval_status', 'pending')
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      
+      // Flatten the nested seller_profiles
+      const transformedData = data.map(item => ({
+        ...item,
+        ...(item.seller_profiles || {}),
+        seller_profiles: undefined
+      }));
+      
+      return { 
+        success: true, 
+        sellers: transformedData 
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
 }

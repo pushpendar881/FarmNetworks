@@ -19,6 +19,7 @@
   let searchTerm = '';
   let statusFilter = 'all';
   let approvalFilter = 'all';
+let statusFilter2 = 'all'; // Add this new filter for blocked status
   let cityFilter = 'all';
   let stateFilter = 'all';
   let businessTypeFilter = 'all';
@@ -33,8 +34,9 @@
 
   // Calculate stats
   $: totalSellers = sellers.length;
-  $: approvedSellers = sellers.filter(s => s.is_approved === true).length;
-  $: pendingSellers = sellers.filter(s => s.is_approved === false).length;
+  $: approvedSellers = sellers.filter(s => s.is_approved === true && s.approval_status !== 'blocked').length;
+$: pendingSellers = sellers.filter(s => s.is_approved === false && s.approval_status !== 'blocked').length;
+$: blockedSellers = sellers.filter(s => s.approval_status === 'blocked').length;
   $: totalGateways = gateways.length;
   $: activeGateways = gateways.filter(g => g.status === 'active').length;
   $: totalDevices = devices.length;
@@ -58,15 +60,19 @@
                          (statusFilter === 'active' && seller.is_approved === true) ||
                          (statusFilter === 'inactive' && seller.is_approved === false);
     
-    const matchesApproval = approvalFilter === 'all' ||
-                           (approvalFilter === 'approved' && seller.is_approved === true) ||
-                           (approvalFilter === 'pending' && seller.is_approved === false);
-    
-    const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
+                         const matchesApproval = approvalFilter === 'all' ||
+                       (approvalFilter === 'approved' && seller.is_approved === true) ||
+                       (approvalFilter === 'pending' && seller.is_approved === false);
+
+const matchesStatus2 = statusFilter2 === 'all' ||
+                      (statusFilter2 === 'blocked' && seller.approval_status === 'blocked') ||
+                      (statusFilter2 === 'active' && seller.approval_status !== 'blocked');
+
+const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
     const matchesState = stateFilter === 'all' || seller.state === stateFilter;
     const matchesBusinessType = businessTypeFilter === 'all' || seller.business_type === businessTypeFilter;
     
-    return matchesSearch && matchesStatus && matchesApproval && matchesCity && matchesState && matchesBusinessType;
+    return matchesSearch && matchesStatus && matchesApproval && matchesStatus2 && matchesCity && matchesState && matchesBusinessType;
   });
 
   onMount(async () => {
@@ -76,6 +82,43 @@
   onDestroy(() => {
     destroyCharts();
   });
+  async function blockSeller(sellerId) {
+  console.log('Blocking seller:', sellerId);
+  try{
+    const {data, error} = await supabase
+      .from('seller_profiles')
+      .update({
+        approval_status: 'blocked',
+        is_approved: false
+      })
+      .eq('id', sellerId);
+    if(error) throw error;
+    console.log('Seller blocked successfully');
+    handleRefresh();
+  }catch(err){
+    console.error('Error blocking seller:', err);
+    throw err;
+  }
+};
+
+async function unblockSeller(sellerId) {
+  console.log('Unblocking seller:', sellerId);
+  try{
+    const {data, error} = await supabase
+      .from('seller_profiles')
+      .update({
+        approval_status: 'approved',
+        is_approved: true
+      })
+      .eq('id', sellerId);
+    if(error) throw error;
+    console.log('Seller unblocked successfully');
+    handleRefresh();
+  }catch(err){
+    console.error('Error unblocking seller:', err);
+    throw err;
+  }
+};
 
   async function initializeComponent() {
     try {
@@ -512,6 +555,15 @@
       </select>
     </div>
 
+    <div class="dropdown-filter">
+      <span class="filter-label">Status</span>
+      <select bind:value={statusFilter2}>
+        <option value="all">All Status</option>
+        <option value="active">Active</option>
+        <option value="blocked">Blocked</option>
+      </select>
+    </div>
+
     <!-- <div class="dropdown-filter">
       <!-- <span class="filter-label">Business Type</span> 
       <select bind:value={businessTypeFilter}>
@@ -594,6 +646,14 @@
         <div class="stat-label">Pending Payments</div>
         <div class="stat-value">{pendingPayments}</div>
         <div class="stat-detail">Need processing</div>
+      </div>
+    </div>
+
+    <div class="stat-card blocked">
+      <div class="stat-content">
+        <div class="stat-label">Blocked Sellers</div>
+        <div class="stat-value">{blockedSellers}</div>
+        <div class="stat-detail">Need attention</div>
       </div>
     </div>
   </div>
@@ -693,11 +753,18 @@
                   </div>
                 </td>
                 <td class="status-cell">
-                  <div class="approval-badge" class:approved={seller.is_approved} class:pending={!seller.is_approved}>
-                    <span class="status-icon">{seller.is_approved ? '✅' : '⏳'}</span>
-                    <span class="status-text">{seller.is_approved ? 'Approved' : 'Pending'}</span>
+                  <div class="approval-badge" 
+                       class:approved={seller.is_approved && seller.approval_status !== 'blocked'} 
+                       class:pending={!seller.is_approved && seller.approval_status !== 'blocked'} 
+                       class:blocked={seller.approval_status === 'blocked'}>
+                    <span class="status-icon">
+                      {seller.approval_status === 'blocked' ? '🚫' : (seller.is_approved ? '✅' : '⏳')}
+                    </span>
+                    <span class="status-text">
+                      {seller.approval_status === 'blocked' ? 'Blocked' : (seller.is_approved ? 'Approved' : 'Pending')}
+                    </span>
                   </div>
-                  {#if seller.approved_at}
+                  {#if seller.approved_at && seller.approval_status !== 'blocked'}
                     <div class="approved-date">
                       Approved: {new Date(seller.approved_at).toLocaleDateString()}
                     </div>
@@ -705,12 +772,20 @@
                 </td>
                 <td class="actions-cell">
                   <div class="action-buttons">
-                    <!-- <button class="view-details-btn" on:click={() => viewDetails(seller.id)}>
-                      👁️ View
-                    </button> -->
-                    {#if !seller.is_approved}
+                    {#if seller.approval_status === 'blocked'}
+                      <button class="unblock-btn" on:click={() => unblockSeller(seller.id)}>
+                        🔓 Unblock
+                      </button>
+                    {:else if !seller.is_approved}
                       <button class="approve-btn" on:click={() => approveSeller(seller.id)}>
                         ✅ Approve
+                      </button>
+                      <button class="block-btn" on:click={() => blockSeller(seller.id)}>
+                        🚫 Block
+                      </button>
+                    {:else}
+                      <button class="block-btn" on:click={() => blockSeller(seller.id)}>
+                        🚫 Block
                       </button>
                     {/if}
                   </div>
@@ -725,6 +800,50 @@
 </div>
 
 <style>
+  .stat-card.blocked {
+  border-left: 4px solid #EF4444;
+}
+
+.approval-badge.blocked {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.block-btn {
+  background: #ef4444;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.block-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.unblock-btn {
+  background: #10b981;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.unblock-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
   .dashboard-content {
     padding: 20px 40px;
     max-width: 1600px;
