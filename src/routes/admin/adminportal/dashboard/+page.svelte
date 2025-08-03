@@ -92,6 +92,30 @@
       </div>
     {/if}
 
+    <!-- Statistics Explanation
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+      <h3 class="text-lg font-semibold text-blue-900 mb-4">📊 Dashboard Statistics Explained</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-blue-800">
+        <div>
+          <h4 class="font-semibold mb-2">Device Status (Pie Chart):</h4>
+          <ul class="space-y-1">
+            <li>• <strong>Online Devices:</strong> Devices with motor_status = 1 (motor is running/active)</li>
+            <li>• <strong>Offline Devices:</strong> Devices with motor_status = 0 (motor is stopped/inactive)</li>
+            <li>• <strong>Percentage:</strong> Shows the proportion of online vs offline devices</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-2">Key Metrics:</h4>
+          <ul class="space-y-1">
+            <li>• <strong>Total Devices:</strong> All registered IoT devices in the system</li>
+            <li>• <strong>Active Masters:</strong> Gateways with status = 'active' (functioning properly)</li>
+            <li>• <strong>Monthly Earnings:</strong> Total revenue from seller_earnings table</li>
+            <li>• <strong>Online Devices:</strong> Devices currently operational (motor_status = 1)</li>
+          </ul>
+        </div>
+      </div>
+    </div> -->
+
     <!-- Top Metrics Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <!-- Total Devices -->
@@ -214,7 +238,7 @@
 
       <!-- Device Status Pie Chart -->
       <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Device Status</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Device Status (Based on Motor Status)</h3>
         <div class="flex items-center justify-center h-64">
           <div class="relative">
             {#if $deviceStatusPercentages}
@@ -270,6 +294,23 @@
             <span class="text-sm text-gray-600">Offline: {$deviceStatusData.offline} ({$deviceStatusPercentages.offline}%)</span>
           </div>
         </div>
+        <div class="mt-4 text-xs text-gray-500 text-center">
+          <p><strong>Note:</strong> Online = motor_status = 1, Offline = motor_status = 0</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gateway Management Link -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Gateway Management</h3>
+      <div class="text-center">
+        <p class="text-gray-600 mb-4">Manage your IoT gateways, block/unblock devices, and monitor network status.</p>
+        <a href="/admin/adminportal/gateways" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+          </svg>
+          Manage Gateways
+        </a>
       </div>
     </div>
 

@@ -27,6 +27,11 @@ export const deviceStatusData = writable({
   offline: 0
 });
 
+// Gateway management stores
+export const gateways = writable([]);
+export const gatewaysLoading = writable(false);
+export const gatewaysError = writable(null);
+
 // Helper functions
 const getCurrentMonthYear = () => {
   const now = new Date();
@@ -43,6 +48,73 @@ const getMonthName = (date) => {
   return date.toLocaleDateString('en-US', { month: 'short' });
 };
 
+// Gateway management functions
+export const fetchGateways = async () => {
+  try {
+    gatewaysLoading.set(true);
+    gatewaysError.set(null);
+
+    const { data, error: fetchError } = await supabase
+      .from('gateways')
+      .select(`
+        *,
+        seller_profiles!inner(
+          business_name,
+          business_type,
+          city,
+          state
+        ),
+        devices(count)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (fetchError) throw fetchError;
+
+    // Process the data to include device count
+    const processedGateways = data.map(gateway => ({
+      ...gateway,
+      device_count: gateway.devices?.[0]?.count || 0
+    }));
+
+    gateways.set(processedGateways);
+
+  } catch (err) {
+    console.error('Error fetching gateways:', err);
+    gatewaysError.set(err.message);
+  } finally {
+    gatewaysLoading.set(false);
+  }
+};
+
+export const toggleGatewayStatus = async (gatewayId, newStatus) => {
+  try {
+    const { error: updateError } = await supabase
+      .from('gateways')
+      .update({ status: newStatus })
+      .eq('id', gatewayId);
+
+    if (updateError) throw updateError;
+
+    // Refresh gateways list
+    await fetchGateways();
+    
+    // Also refresh dashboard overview since gateway count might change
+    await fetchDashboardOverview();
+
+  } catch (err) {
+    console.error('Error updating gateway status:', err);
+    error.set(err.message);
+  }
+};
+
+export const blockGateway = async (gatewayId) => {
+  await toggleGatewayStatus(gatewayId, 'inactive');
+};
+
+export const unblockGateway = async (gatewayId) => {
+  await toggleGatewayStatus(gatewayId, 'active');
+};
+
 // Dashboard overview fetch function
 export const fetchDashboardOverview = async () => {
   try {
@@ -52,7 +124,7 @@ export const fetchDashboardOverview = async () => {
     // Get total devices count and growth
     const { data: devices, error: devicesError } = await supabase
       .from('devices')
-      .select('id, created_at, last_updated');
+      .select('id, created_at, motor_status');
     
     if (devicesError) throw devicesError;
 
@@ -63,7 +135,7 @@ export const fetchDashboardOverview = async () => {
     const deviceGrowth = devicesLastMonth > 0 ? 
       Math.round((totalDevices - devicesLastMonth) / devicesLastMonth * 100) : 0;
 
-    // Get active gateways (masters)
+    // Get active gateways (masters) - only count active status
     const { data: gateways, error: gatewaysError } = await supabase
       .from('gateways')
       .select('id, status, created_at')
@@ -100,12 +172,10 @@ export const fetchDashboardOverview = async () => {
     const earningsGrowth = previousMonthEarnings > 0 ? 
       Math.round((monthlyEarnings - previousMonthEarnings) / previousMonthEarnings * 100) : 0;
 
-    // Get online/offline devices (devices updated in last 5 minutes are considered online)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const onlineDevices = devices.filter(d => 
-      d.last_updated && new Date(d.last_updated) >= new Date(fiveMinutesAgo)
-    ).length;
-    const offlineDevices = totalDevices - onlineDevices;
+    // Get online/offline devices based on motor_status
+    // motor_status = 1 means online, motor_status = 0 means offline
+    const onlineDevices = devices.filter(d => d.motor_status === 1).length;
+    const offlineDevices = devices.filter(d => d.motor_status === 0).length;
     
     // Calculate online devices change (simplified - could be enhanced with historical data)
     const onlineDevicesGrowth = -2; // This would need more complex logic
@@ -234,7 +304,8 @@ export const fetchAllDashboardData = async () => {
   await Promise.all([
     fetchDashboardOverview(),
     fetchMonthlyGrowth(),
-    fetchRecentAlerts()
+    fetchRecentAlerts(),
+    fetchGateways()
   ]);
 };
 

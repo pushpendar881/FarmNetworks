@@ -7,6 +7,7 @@
   // Navigation items with proper routes
   const navItems = [
     { label: 'Dashboard', icon: '📊', href: '/admin/adminportal/dashboard' },
+    { label: 'Gateway Management', icon: '🌐', href: '/admin/adminportal/gateways' },
     { label: 'Device Management', icon: '📱', href: '/admin/adminportal/devices' },
     { label: 'Seller Management', icon: '👥', href: '/admin/adminportal/sellers' },
     { label: 'Map View', icon: '🗺️', href: '/admin/adminportal/MapView' },
@@ -130,7 +131,8 @@
   class:mobile-open={isMobile && isOpen}
 >
   <div class="logo">
-      <div class="logo-icon">FN</div>
+      <!-- <div class="logo-icon">FN</div> -->
+      <img src="/images/blacklogo.png" alt="FarmNetworks" class="w-8 h-8">
       {#if !isCollapsed || isMobile}
           <div class="logo-text">
               <h2>FarmNetworks</h2>
@@ -307,13 +309,13 @@
       transform: translateX(0);
   }
 
-  .logo {
-      display: flex;
-      align-items: center;
-      padding: 0 2rem;
-      margin-bottom: 3rem;
-  }
-
+ 
+    .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-left: 15px;
+    }
   .sidebar.collapsed .logo {
       padding: 0 1rem;
       justify-content: center;
