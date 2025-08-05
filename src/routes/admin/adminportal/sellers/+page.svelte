@@ -492,7 +492,7 @@ async function unblockSeller(sellerId) {
   <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.45.1/apexcharts.min.js"></script>
 </svelte:head>
 
-<Header title="Seller Management" />
+<Header title="Sellers" />
 
 {#if error}
   <div class="error-banner">
@@ -847,10 +847,11 @@ async function unblockSeller(sellerId) {
   transform: translateY(-1px);
 }
   .dashboard-content {
-    padding: 20px 40px;
-    max-width: 1600px;
+    padding: 2rem;
+    max-width: 1400px;
     margin: 0 auto;
   }
+
 
   .filters-section {
     display: flex;

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { supabase } from '$lib/supabase.js';
+  import Header from '$lib/components/Header.svelte';
 
   // Device data from database
   let devices = [];
@@ -164,27 +165,8 @@ async function blockDevice(deviceId, block = true) {
   });
 </script>
 
-<div class="device-management">
-  <!-- Header -->
-  <!-- <div class="page-header" in:fade={{ delay: 100 }}>
-    <div class="header-top">
-      <span class="welcome-text">Welcome back, Admin</span>
-      <div class="user-actions">
-        <button class="notification-btn">🔔</button>
-        <div class="user-profile">
-          <span class="user-avatar">👤</span>
-          <span class="user-name">Admin</span>
-        </div>
-      </div>
-    </div>
-    
-    <div class="page-title-section">
-      <h1>Device Management</h1>
-      <button class="export-btn" on:click={handleExport}>
-        ⬇️ Export Data
-      </button>
-    </div>
-  </div> -->
+<div class="dashboard-content">
+  <Header title="Devices" />
 
   <!-- Filters Section -->
   <div class="filters-section" in:fade={{ delay: 200 }}>
@@ -398,107 +380,20 @@ async function blockDevice(deviceId, block = true) {
 </div>
 
 <style>
-  .device-management {
+  .dashboard-content {
     padding: 2rem;
-    background: #f8fafc;
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
-  /* Header Styles */
-  .page-header {
-    margin-bottom: 2rem;
-  }
-
-  .header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-  }
-
-  .welcome-text {
-    color: #6b7280;
-    font-size: 0.9rem;
-  }
-
-  .user-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .notification-btn {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 8px;
-    transition: background 0.2s;
-  }
-
-  .notification-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-  }
-
-  .user-profile {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: white;
-    padding: 0.5rem 1rem;
-    border-radius: 25px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .user-avatar {
-    font-size: 1.2rem;
-  }
-
-  .user-name {
-    font-weight: 500;
-    color: #374151;
-  }
-
-  .page-title-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .page-title-section h1 {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1f2937;
-    margin: 0;
-  }
-
-  .export-btn {
-    background: #3b82f6;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .export-btn:hover {
-    background: #2563eb;
-    transform: translateY(-1px);
-  }
-
-  /* Filters Section */
   .filters-section {
     display: flex;
-    gap: 2rem;
+    gap: 15px;
     align-items: end;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
+    margin-bottom: 25px;
+    padding: 20px;
     background: white;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     flex-wrap: wrap;
   }
@@ -506,11 +401,11 @@ async function blockDevice(deviceId, block = true) {
   .search-filter, .dropdown-filter {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .filter-label {
-    font-size: 0.85rem;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
   }
@@ -523,16 +418,16 @@ async function blockDevice(deviceId, block = true) {
 
   .search-icon {
     position: absolute;
-    left: 1rem;
+    left: 12px;
     color: #9ca3af;
   }
 
   .search-input input {
-    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    padding: 8px 10px 8px 30px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    width: 250px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 280px;
   }
 
   .search-input input:focus {
@@ -542,13 +437,13 @@ async function blockDevice(deviceId, block = true) {
   }
 
   select {
-    padding: 0.75rem;
+    padding: 8px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    font-size: 13px;
     background: white;
     cursor: pointer;
-    min-width: 150px;
+    min-width: 140px;
   }
 
   select:focus {
@@ -557,393 +452,49 @@ async function blockDevice(deviceId, block = true) {
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 
-  .more-filters-btn {
-    background: none;
-    border: 1px solid #d1d5db;
-    padding: 0.75rem 1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    color: #6b7280;
-    transition: all 0.2s;
-  }
-
-  .more-filters-btn:hover {
-    background: #f9fafb;
-    border-color: #9ca3af;
-  }
-
-  /* Stats Section */
   .stats-section {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+  }
 
   .stat-card {
     background: white;
-    padding: 1.5rem;
-    border-radius: 12px;
+    padding: 22px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
     transition: transform 0.2s;
+    border: 1px solid #f1f5f9;
   }
 
   .stat-card:hover {
     transform: translateY(-2px);
   }
 
-  .stat-icon {
-    font-size: 1.5rem;
-    padding: 0.75rem;
-    border-radius: 10px;
-    background: #f3f4f6;
-  }
-
-  .stat-card.online .stat-icon {
-    background: #d1fae5;
-  }
-
-  .stat-card.offline .stat-icon {
-    background: #fee2e2;
-  }
-
-  .stat-card.warning .stat-icon {
-  background: #fef3c7;
-}
-
-.stat-card.blocked .stat-icon {
-  background: #fecaca;
-}
-
-.device-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.blocked-indicator {
-  background: #fee2e2;
-  color: #991b1b;
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-align: center;
-}
-
-.block-btn {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.block-btn:hover {
-  background: #dc2626;
-}
-
-.unblock-btn {
-  background: #10b981;
-  color: white;
-  border: none;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.unblock-btn:hover {
-  background: #059669;
-}
-
   .stat-content {
-    flex: 1;
+    text-align: center;
   }
 
   .stat-label {
-    font-size: 0.85rem;
+    font-size: 13px;
     color: #6b7280;
-    margin-bottom: 0.25rem;
+    margin-bottom: 8px;
+    font-weight: 500;
   }
 
   .stat-value {
-    font-size: 1.75rem;
+    font-size: 28px;
     font-weight: 700;
     color: #1f2937;
   }
 
-  /* Loading and Error States */
-  .loading-section, .error-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 2rem;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  }
-
-  .loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #e2e8f0;
-    border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-bottom: 1rem;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-
-  .retry-btn {
-    margin-top: 1rem;
-    padding: 0.75rem 1.5rem;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-  }
-
-  /* Table Section */
-  .table-section {
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    overflow: hidden;
-  }
-
-  .table-container {
-    overflow-x: auto;
-  }
-
-  .devices-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .devices-table th {
-    background: #f9fafb;
-    padding: 1rem;
-    text-align: left;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .devices-table td {
-    padding: 1rem;
-    border-bottom: 1px solid #f3f4f6;
-  }
-
-  .device-row:hover {
-    background: #f9fafb;
-  }
-
-  .checkbox {
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-  }
-
-  .device-info {
-    min-width: 200px;
-  }
-
-  .device-id {
-    font-weight: 600;
-    color: #1f2937;
-    margin-bottom: 0.25rem;
-  }
-
-  .device-name {
-    font-weight: 500;
-    color: #374151;
-    margin-bottom: 0.25rem;
-  }
-
-  .device-installed {
-    font-size: 0.8rem;
-    color: #6b7280;
-    margin-bottom: 0.25rem;
-  }
-
-  .device-farm {
-    font-size: 0.8rem;
-    color: #059669;
-    font-weight: 500;
-  }
-
-  .gateway-info, .user-info {
-    min-width: 150px;
-  }
-
-  .gateway-name, .user-name {
-    font-weight: 500;
-    color: #1f2937;
-    margin-bottom: 0.25rem;
-  }
-
-  .gateway-id, .user-id {
-    font-size: 0.8rem;
-    color: #6b7280;
-  }
-
-  .status-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    width: fit-content;
-    margin-bottom: 0.5rem;
-  }
-
-  .status-badge.online {
-    background: #d1fae5;
-    color: #065f46;
-  }
-
-  .status-badge.offline {
-    background: #fee2e2;
-    color: #991b1b;
-  }
-
-  .error-badge {
-    background: #fef3c7;
-    color: #92400e;
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 500;
-    width: fit-content;
-  }
-
-  .last-active {
-    color: #6b7280;
-    font-size: 0.9rem;
-  }
-
-  .subscription-details {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .plan-name {
-    font-weight: 500;
-    color: #1f2937;
-    font-size: 0.9rem;
-  }
-
-  .plan-type {
-    font-size: 0.8rem;
-    color: #6b7280;
-    text-transform: capitalize;
-  }
-
-  .expires-date {
-    font-size: 0.8rem;
-    color: #6b7280;
-  }
-
-  .expired-badge {
-    background: #fee2e2;
-    color: #991b1b;
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 500;
-    width: fit-content;
-  }
-
-  .active-badge {
-    background: #d1fae5;
-    color: #065f46;
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 500;
-    width: fit-content;
-  }
-
-  .no-plan-badge {
-    background: #f3f4f6;
-    color: #6b7280;
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 500;
-    width: fit-content;
-  }
-
-  .view-details-btn {
-    background: none;
-    border: none;
-    color: #3b82f6;
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 0.5rem;
-    border-radius: 6px;
-    transition: all 0.2s;
-  }
-
-  .view-details-btn:hover {
-    background: rgba(59, 130, 246, 0.1);
-  }
-
   /* Responsive Design */
-  @media (max-width: 1024px) {
-    .stats-section {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .filters-section {
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-  }
-
   @media (max-width: 768px) {
-    .device-management {
+    .dashboard-content {
       padding: 1rem;
     }
     
-    .stats-section {
-      grid-template-columns: 1fr;
-    }
-    
-    .page-title-section {
-      flex-direction: column;
-      gap: 1rem;
-      align-items: flex-start;
-    }
-    
-    .header-top {
-      flex-direction: column;
-      gap: 1rem;
-      align-items: flex-start;
-    }
-
     .filters-section {
       flex-direction: column;
       align-items: stretch;
@@ -953,8 +504,8 @@ async function blockDevice(deviceId, block = true) {
       width: 100%;
     }
 
-    select {
-      width: 100%;
+    .stats-section {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
   }
 </style>

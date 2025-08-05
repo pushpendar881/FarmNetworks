@@ -7,9 +7,9 @@
   // Navigation items with proper routes
   const navItems = [
     { label: 'Dashboard', icon: '📊', href: '/admin/adminportal/dashboard' },
-    { label: 'Gateway Management', icon: '🌐', href: '/admin/adminportal/gateways' },
-    { label: 'Device Management', icon: '📱', href: '/admin/adminportal/devices' },
-    { label: 'Seller Management', icon: '👥', href: '/admin/adminportal/sellers' },
+    { label: 'Gateways', icon: '🌐', href: '/admin/adminportal/gateways' },
+    { label: 'Devices', icon: '📱', href: '/admin/adminportal/devices' },
+    { label: 'Sellers', icon: '👥', href: '/admin/adminportal/sellers' },
     { label: 'Map View', icon: '🗺️', href: '/admin/adminportal/MapView' },
   //   { label: 'Settings', icon: '⚙️', href: '/admin/adminportal/settings' }
   ];
@@ -312,12 +312,13 @@
   }
 
  
-    .logo {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding-left: 15px;
-    }
+      .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-left: 15px;
+      margin-bottom: 3rem; /* Increased spacing between logo and navigation */
+  }
   .sidebar.collapsed .logo {
       padding: 0 1rem;
       justify-content: center;
@@ -344,14 +345,14 @@
 
   .logo-text h2 {
       margin: 0;
-      font-size: 1.5rem;
+      font-size: 1.8rem; /* Increased from 1.5rem */
       font-weight: 700;
       color: #1a202c;
   }
 
   .logo-text p {
       margin: 0;
-      font-size: 0.8rem;
+      font-size: 1rem; /* Increased from 0.8rem */
       color: #6b7280;
   }
 
@@ -379,7 +380,7 @@
       width: 100%;
       text-align: left;
       font-family: inherit;
-      font-size: inherit;
+      font-size: 1.1rem; /* Increased font size */
       position: relative;
   }
 
@@ -410,7 +411,7 @@
   }
 
   .nav-icon {
-      font-size: 1.2rem;
+      font-size: 1.4rem; /* Increased from 1.2rem */
       margin-right: 1rem;
       width: 24px;
       text-align: center;
@@ -422,7 +423,7 @@
   }
 
   .nav-label {
-      font-size: 0.95rem;
+      font-size: 1.1rem; /* Increased from 0.95rem */
   }
 
   /* Tooltip for collapsed desktop sidebar */
@@ -489,12 +490,12 @@
   .user-name {
       font-weight: 600;
       color: #1a202c;
-      font-size: 0.9rem;
+      font-size: 1.1rem; /* Increased from 0.9rem */
   }
 
   .user-role {
       color: #6b7280;
-      font-size: 0.8rem;
+      font-size: 1rem; /* Increased from 0.8rem */
   }
 
   .logout-btn {
@@ -511,6 +512,7 @@
       transition: all 0.3s ease;
       font-weight: 500;
       position: relative;
+      font-size: 1.1rem; /* Added font size */
   }
 
   .logout-btn:hover {
@@ -519,7 +521,7 @@
   }
 
   .logout-icon {
-      font-size: 1rem;
+      font-size: 1.2rem; /* Increased from 1rem */
       margin-right: 0.5rem;
       flex-shrink: 0;
   }
@@ -529,7 +531,7 @@
   }
 
   .logout-text {
-      font-size: 0.9rem;
+      font-size: 1.1rem; /* Increased from 0.9rem */
   }
 
   /* Tooltip for collapsed logout button */

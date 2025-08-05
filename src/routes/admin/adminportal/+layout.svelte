@@ -19,6 +19,7 @@
   }
 </script>
 
+
 {#if $adminLoading || !initialized}
   <div class="min-h-screen flex items-center justify-center bg-gray-50">
     <div class="text-center">
@@ -55,6 +56,12 @@
     background: #f7fafc;
     min-height: 100vh;
   }
+    .dashboard-content {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
 
   @media (max-width: 768px) {
     .main-content {

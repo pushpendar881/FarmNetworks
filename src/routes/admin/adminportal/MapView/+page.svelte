@@ -438,7 +438,7 @@ animationFrame = requestAnimationFrame(animateDotPulse);
   <title>Admin Device Map - System Overview</title>
 </svelte:head>
 
-<Header title="Admin Device Map" />
+<Header title="Map View" />
 
 <div class="dashboard-content">
   <!-- Statistics Cards -->

@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import Header from '$lib/components/Header.svelte';
   import {
     dashboardOverview,
     monthlyGrowthData,
@@ -65,32 +66,84 @@
   }
 </script>
 
-<div class="min-h-screen bg-gray-50 p-6">
-  <div class="max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-8">
-      <h1 class="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
-      <div class="flex items-center space-x-4">
-        {#if $isLoading}
-          <div class="flex items-center text-gray-500">
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Loading...
-          </div>
-        {/if}
-        <p class="text-gray-500">Last updated: {currentTime}</p>
-      </div>
-    </div>
+<style>
+  .dashboard-content {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
 
-    <!-- Error Message -->
-    {#if $error}
-      <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-        <strong class="font-bold">Error:</strong>
-        <span class="block sm:inline">{$error}</span>
-      </div>
-    {/if}
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .stat-card {
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .stat-icon {
+    font-size: 40px;
+    width: 70px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border-radius: 15px;
+  }
+
+  .stat-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: #2d3748;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 14px;
+    color: #718096;
+    margin-top: 4px;
+  }
+
+  .stat-detail {
+    font-size: 12px;
+    color: #38a169;
+    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .dashboard-content {
+      padding: 1rem;
+    }
+    
+    .stats-grid {
+      grid-template-columns: 1fr;
+      gap: 15px;
+    }
+  }
+</style>
+
+<div class="dashboard-content">
+  <Header title="Dashboard" />
+
+  <!-- Error Message -->
+  {#if $error}
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+      <strong class="font-bold">Error:</strong>
+      <span class="block sm:inline">{$error}</span>
+    </div>
+  {/if}
 
     <!-- Statistics Explanation
     <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
@@ -349,8 +402,8 @@
         {/if}
       </div>
     </div> -->
-  </div>
-</div>
+
+
 
 <style>
   /* Custom styles for better visual appeal */
@@ -359,3 +412,4 @@
     line-height: 1rem;
   }
 </style>
+</div>

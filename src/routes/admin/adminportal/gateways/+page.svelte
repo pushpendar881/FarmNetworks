@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { supabase } from '$lib/supabase.js';
+  import Header from '$lib/components/Header.svelte';
 
   // Gateway data from database
   let gateways = [];
@@ -197,7 +198,9 @@
   });
 </script>
 
-<div class="gateway-management">
+<div class="dashboard-content">
+  <Header title="Gateways" />
+
   <!-- Filters Section -->
   <div class="filters-section" in:fade={{ delay: 200 }}>
     <div class="search-filter">
@@ -379,22 +382,20 @@
 </div>
 
 <style>
-  .gateway-management {
+  .dashboard-content {
     padding: 2rem;
-    background: #f8fafc;
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
-  /* Filters Section */
   .filters-section {
     display: flex;
-    gap: 2rem;
+    gap: 15px;
     align-items: end;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
+    margin-bottom: 25px;
+    padding: 20px;
     background: white;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     flex-wrap: wrap;
   }
@@ -402,11 +403,11 @@
   .search-filter, .dropdown-filter {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .filter-label {
-    font-size: 0.85rem;
+    font-size: 12px;
     font-weight: 500;
     color: #6b7280;
   }
@@ -419,16 +420,16 @@
 
   .search-icon {
     position: absolute;
-    left: 1rem;
+    left: 12px;
     color: #9ca3af;
   }
 
   .search-input input {
-    padding: 0.75rem 1rem 0.75rem 2.5rem;
+    padding: 8px 10px 8px 30px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    width: 250px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 280px;
   }
 
   .search-input input:focus {
@@ -438,13 +439,13 @@
   }
 
   select {
-    padding: 0.75rem;
+    padding: 8px;
     border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    font-size: 13px;
     background: white;
     cursor: pointer;
-    min-width: 150px;
+    min-width: 140px;
   }
 
   select:focus {
@@ -453,57 +454,39 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 
-  /* Stats Section */
   .stats-section {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
   }
 
   .stat-card {
     background: white;
-    padding: 1.5rem;
-    border-radius: 12px;
+    padding: 22px;
+    border-radius: 10px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
     transition: transform 0.2s;
+    border: 1px solid #f1f5f9;
   }
 
   .stat-card:hover {
     transform: translateY(-2px);
   }
 
-  /* .stat-card.online {
-    border-left: 4px solid #10b981;
-  }
-
-  .stat-card.offline {
-    border-left: 4px solid #ef4444;
-  }
-
-  .stat-card.maintenance {
-    border-left: 4px solid #f59e0b;
-  }
-
-  .stat-card.devices {
-    border-left: 4px solid #3b82f6;
-  } */
-
   .stat-content {
-    flex: 1;
+    text-align: center;
   }
 
   .stat-label {
-    font-size: 0.85rem;
+    font-size: 13px;
     color: #6b7280;
-    margin-bottom: 0.25rem;
+    margin-bottom: 8px;
+    font-weight: 500;
   }
 
   .stat-value {
-    font-size: 1.75rem;
+    font-size: 28px;
     font-weight: 700;
     color: #1f2937;
   }
@@ -746,26 +729,11 @@
   }
 
   /* Responsive Design */
-  @media (max-width: 1024px) {
-    .stats-section {
-      grid-template-columns: repeat(3, 1fr);
-    }
-    
-    .filters-section {
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-  }
-
   @media (max-width: 768px) {
-    .gateway-management {
+    .dashboard-content {
       padding: 1rem;
     }
     
-    .stats-section {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
     .filters-section {
       flex-direction: column;
       align-items: stretch;
@@ -775,14 +743,8 @@
       width: 100%;
     }
 
-    select {
-      width: 100%;
-    }
-  }
-
-  @media (max-width: 480px) {
     .stats-section {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
   }
 </style> 
