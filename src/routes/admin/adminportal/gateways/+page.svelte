@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { supabase } from '$lib/supabase.js';
+  import Header from '$lib/components/Header.svelte';
 
   // Gateway data from database
   let gateways = [];
@@ -196,6 +197,7 @@
     fetchGateways();
   });
 </script>
+<Header title="gateway-management" />
 
 <div class="gateway-management">
   <!-- Filters Section -->

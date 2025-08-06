@@ -13,10 +13,19 @@
     stopAutoRefresh,
     subscribeToDeviceUpdates
   } from '$lib/stores/admin/dashboard.js';
+  import Header from '$lib/components/Header.svelte';
+  import { supabase } from '$lib/supabase.js';
 
   let currentTime = new Date().toLocaleString();
   let timeInterval;
   let unsubscribeRealtime;
+
+  // Commission management state
+  let currentCommission = 0;
+  let newCommissionRate = 0;
+  let isUpdatingCommission = false;
+  let commissionError = null;
+  let commissionSuccess = false;
 
   onMount(async () => {
     // Update current time every second
@@ -26,6 +35,7 @@
 
     // Initial data fetch
     await fetchAllDashboardData();
+    await fetchCurrentCommission();
 
     // Start auto-refresh every 30 seconds
     startAutoRefresh(30000);
@@ -43,6 +53,130 @@
       unsubscribeRealtime();
     }
   });
+
+  // Alternative approach using JavaScript only (without SQL function)
+
+async function updateCommissionAlternative() {
+  // Validation
+  if (newCommissionRate < 0 || newCommissionRate > 100) {
+    commissionError = 'Commission rate must be between 0% and 100%';
+    return;
+  }
+
+  if (newCommissionRate === currentCommission) {
+    commissionError = 'New rate is same as current rate';
+    return;
+  }
+
+  isUpdatingCommission = true;
+  commissionError = null;
+  commissionSuccess = false;
+
+  try {
+    // Step 1: Get current active commission (if any)
+    const { data: currentCommissions, error: fetchError } = await supabase
+      .from('commissions')
+      .select('id')
+      .eq('is_active', true);
+
+    if (fetchError) throw fetchError;
+
+    // Step 2: Deactivate current active commissions (if any exist)
+    if (currentCommissions && currentCommissions.length > 0) {
+      const commissionIds = currentCommissions.map(c => c.id);
+      
+      const { error: deactivateError } = await supabase
+        .from('commissions')
+        .update({ 
+          is_active: false, 
+          updated_at: new Date().toISOString() 
+        })
+        .in('id', commissionIds);
+
+      if (deactivateError) throw deactivateError;
+    }
+
+    // Step 3: Insert new active commission
+    const { error: insertError } = await supabase
+      .from('commissions')
+      .insert({
+        rate: newCommissionRate,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+    if (insertError) throw insertError;
+
+    // Update local state
+    currentCommission = newCommissionRate;
+    commissionSuccess = true;
+
+    // Clear success message after 3 seconds
+    setTimeout(() => {
+      commissionSuccess = false;
+    }, 3000);
+
+  } catch (err) {
+    console.error('Error updating commission:', err);
+    
+    // Handle specific error types
+    if (err.code === '23505') { // Unique constraint violation
+      commissionError = 'Commission update failed due to a conflict. Please refresh and try again.';
+    } else if (err.code === '23514') { // Check constraint violation
+      commissionError = 'Invalid commission rate. Must be between 0 and 100.';
+    } else if (err.message.includes('duplicate key')) {
+      commissionError = 'Another active commission already exists. Please refresh and try again.';
+    } else {
+      commissionError = `Failed to update commission rate: ${err.message}`;
+    }
+  } finally {
+    isUpdatingCommission = false;
+  }
+}
+
+// Also update the fetchCurrentCommission function to be more robust
+async function fetchCurrentCommissionRobust() {
+  try {
+    const { data, error } = await supabase
+      .from('commissions')
+      .select('rate, id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      currentCommission = parseFloat(data[0].rate);
+      newCommissionRate = currentCommission;
+      
+      // If there are multiple active commissions (shouldn't happen but just in case)
+      if (data.length > 1) {
+        console.warn('Multiple active commissions found. This should not happen.');
+      }
+    } else {
+      // No active commission found, set default
+      currentCommission = 0;
+      newCommissionRate = 0;
+    }
+  } catch (err) {
+    console.error('Error fetching commission:', err);
+    commissionError = 'Failed to fetch current commission rate';
+    
+    // Set defaults on error
+    currentCommission = 0;
+    newCommissionRate = 0;
+  }
+}
+
+  function resetCommissionForm() {
+    newCommissionRate = currentCommission;
+    commissionError = null;
+    commissionSuccess = false;
+  }
 
   function getChangeColor(change) {
     return change.startsWith('+') ? 'text-green-600' : 'text-red-600';
@@ -65,25 +199,10 @@
   }
 </script>
 
+<Header title="Dashboard" />
+
 <div class="min-h-screen bg-gray-50 p-6">
   <div class="max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-8">
-      <h1 class="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
-      <div class="flex items-center space-x-4">
-        {#if $isLoading}
-          <div class="flex items-center text-gray-500">
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Loading...
-          </div>
-        {/if}
-        <p class="text-gray-500">Last updated: {currentTime}</p>
-      </div>
-    </div>
-
     <!-- Error Message -->
     {#if $error}
       <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
@@ -92,29 +211,8 @@
       </div>
     {/if}
 
-    <!-- Statistics Explanation
-    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-      <h3 class="text-lg font-semibold text-blue-900 mb-4">📊 Dashboard Statistics Explained</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-blue-800">
-        <div>
-          <h4 class="font-semibold mb-2">Device Status (Pie Chart):</h4>
-          <ul class="space-y-1">
-            <li>• <strong>Online Devices:</strong> Devices with motor_status = 1 (motor is running/active)</li>
-            <li>• <strong>Offline Devices:</strong> Devices with motor_status = 0 (motor is stopped/inactive)</li>
-            <li>• <strong>Percentage:</strong> Shows the proportion of online vs offline devices</li>
-          </ul>
-        </div>
-        <div>
-          <h4 class="font-semibold mb-2">Key Metrics:</h4>
-          <ul class="space-y-1">
-            <li>• <strong>Total Devices:</strong> All registered IoT devices in the system</li>
-            <li>• <strong>Active Masters:</strong> Gateways with status = 'active' (functioning properly)</li>
-            <li>• <strong>Monthly Earnings:</strong> Total revenue from seller_earnings table</li>
-            <li>• <strong>Online Devices:</strong> Devices currently operational (motor_status = 1)</li>
-          </ul>
-        </div>
-      </div>
-    </div> -->
+    <!-- Commission Management Section -->
+  
 
     <!-- Top Metrics Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -297,58 +395,121 @@
         <div class="mt-4 text-xs text-gray-500 text-center">
           <p><strong>Note:</strong> Online = motor_status = 1, Offline = motor_status = 0</p>
         </div>
+
       </div>
     </div>
 
-    <!-- Gateway Management Link -->
-    <!-- <div class="bg-white rounded-lg shadow p-6 mb-8">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Gateway Management</h3>
-      <div class="text-center">
-        <p class="text-gray-600 mb-4">Manage your IoT gateways, block/unblock devices, and monitor network status.</p>
-        <a href="/admin/adminportal/gateways" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-          </svg>
-          Manage Gateways
-        </a>
-      </div>
-    </div> -->
-
-    <!-- Recent Alerts -->
-    <!-- <div class="bg-white rounded-lg shadow">
-      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-        <h3 class="text-lg font-semibold text-gray-900">Recent Alerts</h3>
-        <button class="text-blue-600 hover:text-blue-800 text-sm font-medium">View All</button>
-      </div>
-      <div class="divide-y divide-gray-200">
-        {#if $recentAlerts.length > 0}
-          {#each $recentAlerts as alert}
-            <div class="px-6 py-4 flex items-center">
-              <div class="flex-shrink-0">
-                <svg class="w-5 h-5 {getAlertColor(alert.type)}" fill="currentColor" viewBox="0 0 20 20">
-                  {@html getAlertIcon(alert.type)}
-                </svg>
-              </div>
-              <div class="ml-3 flex-1">
-                <p class="text-sm font-medium text-gray-900">{alert.id}</p>
-                <p class="text-sm text-gray-500">{alert.message}</p>
-              </div>
-              <div class="text-sm text-gray-500">
-                {alert.time}
-              </div>
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Commission Management</h3>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Current Commission Display -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+          <div class="flex items-center justify-between">
+            <div>
+              <h4 class="text-sm font-medium text-gray-700">Current Commission Rate</h4>
+              <p class="text-3xl font-bold text-indigo-600">{currentCommission}%</p>
+              <p class="text-sm text-gray-500 mt-1">Applied to all new subscriptions</p>
             </div>
-          {/each}
-        {:else}
-          <div class="px-6 py-8 text-center text-gray-500">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No alerts</h3>
-            <p class="mt-1 text-sm text-gray-500">All systems are running smoothly.</p>
+            <div class="bg-indigo-100 p-3 rounded-full">
+              <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+              </svg>
+            </div>
           </div>
-        {/if}
+        </div>
+
+        <!-- Update Commission Form -->
+        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <h4 class="text-sm font-medium text-gray-700 mb-4">Update Commission Rate</h4>
+          
+          <!-- Success Message -->
+          {#if commissionSuccess}
+            <div class="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded mb-4 text-sm">
+              ✅ Commission rate updated successfully!
+            </div>
+          {/if}
+
+          <!-- Error Message -->
+          {#if commissionError}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-4 text-sm">
+              ❌ {commissionError}
+            </div>
+          {/if}
+
+          <div class="space-y-4">
+            <div>
+              <label for="commission-rate" class="block text-sm font-medium text-gray-700 mb-2">
+                New Commission Rate (%)
+              </label>
+              <div class="relative">
+                <input
+                  id="commission-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  bind:value={newCommissionRate}
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter rate (0-100)"
+                  disabled={isUpdatingCommission}
+                />
+                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                  <span class="text-gray-500 text-sm">%</span>
+                </div>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">Enter a value between 0 and 100</p>
+            </div>
+
+            <div class="flex space-x-3">
+              <button
+                on:click={updateCommission}
+                disabled={isUpdatingCommission || newCommissionRate === currentCommission}
+                class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {#if isUpdatingCommission}
+                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Updating...
+                {:else}
+                  Update Rate
+                {/if}
+              </button>
+
+              <button
+                on:click={resetCommissionForm}
+                disabled={isUpdatingCommission}
+                class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div> -->
+
+      <!-- Commission Info -->
+      <div class="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
+        <div class="flex items-start">
+          <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+          </svg>
+          <div>
+            <h4 class="text-sm font-medium text-blue-900">Important Information</h4>
+            <div class="mt-1 text-sm text-blue-800">
+              <ul class="list-disc list-inside space-y-1">
+                <li>Commission changes apply to all new subscriptions immediately</li>
+                <li>Existing subscriptions retain their original commission rate</li>
+                <li>All commission rate changes are logged for audit purposes</li>
+                <li>Rate must be between 0% and 100%</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

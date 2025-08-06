@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { supabase } from '$lib/supabase.js';
+  import Header from '$lib/components/Header.svelte';
 
   // Device data from database
   let devices = [];
@@ -163,6 +164,7 @@ async function blockDevice(deviceId, block = true) {
     fetchDevices();
   });
 </script>
+<Header title="device-management" />
 
 <div class="device-management">
   <!-- Header -->
