@@ -32,6 +32,12 @@ let statusFilter2 = 'all'; // Add this new filter for blocked status
   let sellerChartContainer;
   let earningsChartContainer;
 
+  let currentCommission = 0;
+  let newCommissionRate = 0;
+  let isUpdatingCommission = false;
+  let commissionError = null;
+  let commissionSuccess = false;
+
   // Calculate stats
   $: totalSellers = sellers.length;
   $: approvedSellers = sellers.filter(s => s.approval_status === 'approved').length;
@@ -77,11 +83,157 @@ const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
 
   onMount(async () => {
     await initializeComponent();
+   await fetchCurrentCommissionRobust();
   });
 
   onDestroy(() => {
     destroyCharts();
   });
+
+  async function fetchCurrentCommission() {
+  try {
+    const { data, error } = await supabase
+      .from('commissions')
+      .select('rate')
+      .eq('is_active', true)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (data) {
+      currentCommission = parseFloat(data.rate);
+      newCommissionRate = currentCommission;
+    } else {
+      currentCommission = 0;
+      newCommissionRate = 0;
+    }
+  } catch (err) {
+    console.error('Error fetching commission:', err);
+    commissionError = 'Failed to fetch current commission rate';
+    currentCommission = 0;
+    newCommissionRate = 0;
+  }
+}
+
+async function updateCommissionAlternative() {
+  // Validation
+  if (newCommissionRate === null || newCommissionRate === undefined || newCommissionRate === '') {
+    commissionError = 'Please enter a commission rate';
+    return;
+  }
+
+  const rate = parseFloat(newCommissionRate);
+  if (isNaN(rate) || rate < 0 || rate > 100) {
+    commissionError = 'Commission rate must be between 0% and 100%';
+    return;
+  }
+
+  if (rate === currentCommission) {
+    commissionError = 'New rate is same as current rate';
+    return;
+  }
+
+  isUpdatingCommission = true;
+  commissionError = null;
+  commissionSuccess = false;
+
+  try {
+    // Get the current active commission entry
+    const { data: currentCommissions, error: fetchError } = await supabase
+      .from('commissions')
+      .select('id')
+      .eq('is_active', true)
+      .limit(1);
+
+    if (fetchError) throw fetchError;
+
+    if (currentCommissions && currentCommissions.length > 0) {
+      // Update existing active commission
+      const { error: updateError } = await supabase
+        .from('commissions')
+        .update({ 
+          rate: rate,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', currentCommissions[0].id);
+
+      if (updateError) throw updateError;
+
+      // Update local state only after successful update
+      currentCommission = rate;
+      newCommissionRate = rate;
+      commissionSuccess = true;
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        commissionSuccess = false;
+      }, 3000);
+
+    } else {
+      // No active commission found - show specific error
+      commissionError = 'No active commission found. Please contact administrator to set up initial commission rate.';
+    }
+
+  } catch (err) {
+    console.error('Error updating commission:', err);
+    
+    // Handle specific error types
+    if (err.code === '23505') {
+      commissionError = 'Commission update failed due to a conflict. Please refresh and try again.';
+    } else if (err.code === '23514') {
+      commissionError = 'Invalid commission rate. Must be between 0 and 100.';
+    } else {
+      commissionError = `Failed to update commission rate: ${err.message || 'Unknown error'}`;
+    }
+  } finally {
+    isUpdatingCommission = false;
+  }
+}
+
+// Also update the fetchCurrentCommission function to be more robust
+async function fetchCurrentCommissionRobust() {
+  try {
+    const { data, error } = await supabase
+      .from('commissions')
+      .select('rate, id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      currentCommission = parseFloat(data[0].rate);
+      newCommissionRate = currentCommission;
+      
+      // If there are multiple active commissions (shouldn't happen but just in case)
+      if (data.length > 1) {
+        console.warn('Multiple active commissions found. This should not happen.');
+      }
+    } else {
+      // No active commission found, set default
+      currentCommission = 0;
+      newCommissionRate = 0;
+    }
+  } catch (err) {
+    console.error('Error fetching commission:', err);
+    commissionError = 'Failed to fetch current commission rate';
+    
+    // Set defaults on error
+    currentCommission = 0;
+    newCommissionRate = 0;
+  }
+}
+
+  function resetCommissionForm() {
+    newCommissionRate = currentCommission;
+    commissionError = null;
+    commissionSuccess = false;
+  }
   async function blockSeller(sellerId) {
   console.log('Blocking seller:', sellerId);
   try{
@@ -494,6 +646,34 @@ async function unblockSeller(sellerId) {
 
 <Header title="Seller Management" />
 
+<div class="bg-white rounded-lg shadow p-6 mb-8">
+  <!-- <h3 class="text-lg font-semibold text-gray-900 mb-4">Commission Management</h3> -->
+  
+  
+
+  <!-- Commission Info 
+  <div class="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
+    <div class="flex items-start">
+      <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+      </svg>
+      <div>
+        <h4 class="text-sm font-medium text-blue-900">Important Information</h4>
+        <div class="mt-1 text-sm text-blue-800">
+          <ul class="list-disc list-inside space-y-1">
+            <li>Commission changes apply to all new subscriptions immediately</li>
+            <li>Existing subscriptions retain their original commission rate</li>
+            <li>All commission rate changes are logged for audit purposes</li>
+            <li>Rate must be between 0% and 100%</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 
+
+
+
 {#if error}
   <div class="error-banner">
     <div class="error-content">
@@ -506,6 +686,95 @@ async function unblockSeller(sellerId) {
 
 <div class="dashboard-content">
   <!-- Filters Section -->
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6"> 
+    <!-- Current Commission Display   -->
+   <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+     <div class="flex items-center justify-between">
+       <div>
+         <h4 class="text-sm font-medium text-gray-700">Current Commission Rate</h4>
+         <p class="text-3xl font-bold text-indigo-600">{currentCommission}%</p>
+         <p class="text-sm text-gray-500 mt-1">Applied to all new subscriptions</p>
+       </div>
+       <div class="bg-indigo-100 p-3 rounded-full">
+         <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+         </svg>
+       </div>
+     </div>
+   </div>
+
+   <!-- Update Commission Form  -->
+   <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+     <h4 class="text-sm font-medium text-gray-700 mb-4">Update Commission Rate</h4>
+     
+      Success Message 
+     {#if commissionSuccess}
+       <div class="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded mb-4 text-sm">
+         ✅ Commission rate updated successfully!
+       </div>
+     {/if}
+
+      Error Message 
+     {#if commissionError}
+       <div class="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-4 text-sm">
+         ❌ {commissionError}
+       </div>
+     {/if}
+
+     <div class="space-y-4">
+       <div>
+         <label for="commission-rate" class="block text-sm font-medium text-gray-700 mb-2">
+           New Commission Rate (%)
+         </label>
+         <div class="relative">
+           <input
+             id="commission-rate"
+             type="number"
+             min="0"
+             max="100"
+             step="0.01"
+             bind:value={newCommissionRate}
+             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+             placeholder="Enter rate (0-100)"
+             disabled={isUpdatingCommission}
+           />
+           <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+             <span class="text-gray-500 text-sm">%</span>
+           </div>
+         </div>
+         <p class="text-xs text-gray-500 mt-1">Enter a value between 0 and 100</p>
+       </div>
+
+       <div class="flex space-x-3">
+         <button
+         on:click={updateCommissionAlternative}
+           disabled={isUpdatingCommission || newCommissionRate === currentCommission}
+           class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+         >
+           {#if isUpdatingCommission}
+             <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+             </svg>
+             Updating...
+           {:else}
+             Update Rate
+           {/if}
+         </button>
+
+         <button
+           on:click={resetCommissionForm}
+           disabled={isUpdatingCommission}
+           class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+         >
+           Reset
+         </button>
+       </div>
+     </div>
+   </div>
+ </div>
+ 
   <div class="filters-section">
     <div class="search-filter">
       <span class="filter-label">Search Sellers</span>
@@ -659,6 +928,8 @@ async function unblockSeller(sellerId) {
       </div>
     </div>
   </div>
+
+  
 
   <!-- Charts Section -->
   <div class="charts-section">

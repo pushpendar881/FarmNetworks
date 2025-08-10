@@ -399,11 +399,11 @@ async function fetchCurrentCommissionRobust() {
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-6 mb-8">
+    <!-- <div class="bg-white rounded-lg shadow p-6 mb-8">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Commission Management</h3>
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Current Commission Display -->
+        <!-- Current Commission Display 
         <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
           <div class="flex items-center justify-between">
             <div>
@@ -419,18 +419,18 @@ async function fetchCurrentCommissionRobust() {
           </div>
         </div>
 
-        <!-- Update Commission Form -->
+        <!-- Update Commission Form 
         <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
           <h4 class="text-sm font-medium text-gray-700 mb-4">Update Commission Rate</h4>
           
-          <!-- Success Message -->
+          <!-- Success Message 
           {#if commissionSuccess}
             <div class="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded mb-4 text-sm">
               ✅ Commission rate updated successfully!
             </div>
           {/if}
 
-          <!-- Error Message -->
+          <!-- Error Message 
           {#if commissionError}
             <div class="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-4 text-sm">
               ❌ {commissionError}
@@ -490,7 +490,7 @@ async function fetchCurrentCommissionRobust() {
         </div>
       </div>
 
-      <!-- Commission Info -->
+      <!-- Commission Info 
       <div class="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
         <div class="flex items-start">
           <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
@@ -509,7 +509,7 @@ async function fetchCurrentCommissionRobust() {
           </div>
         </div>
       </div>
-    </div>
+    </div> -->
   </div>
 </div>
 
