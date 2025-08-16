@@ -413,7 +413,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-600">Online Devices</p>
-            <p class="text-3xl font-bold text-green-600">{deviceInsights.onlineDevices}</p>
+            <p class="text-3xl font-bold text-gray-900">{deviceInsights.onlineDevices}</p>
             <p class="text-sm text-green-600 mt-1">
               {deviceInsights.totalDevices > 0 ? `${Math.round((deviceInsights.onlineDevices / deviceInsights.totalDevices) * 100)}%` : '0%'} operational
             </p>
@@ -433,7 +433,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-600">Device Issues</p>
-            <p class="text-3xl font-bold text-red-600">{deviceInsights.offlineDevices + deviceInsights.errorDevices}</p>
+            <p class="text-3xl font-bold text-gray-900">{deviceInsights.offlineDevices + deviceInsights.errorDevices}</p>
             <p class="text-sm text-red-600 mt-1">
               {deviceInsights.offlineDevices} offline, {deviceInsights.errorDevices} errors
             </p>
@@ -453,7 +453,7 @@
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-600">Pending Approvals</p>
-            <p class="text-3xl font-bold text-orange-600">{sellerStats.pending}</p>
+            <p class="text-3xl font-bold text-gray-900">{sellerStats.pending}</p>
             <p class="text-sm text-orange-600 mt-1">
               {sellerStats.pending === 0 ? 'All caught up!' : 'Needs attention'}
             </p>
@@ -467,137 +467,10 @@
       </div>
     </div>
 
-    <!-- Device Insights Section -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-      <!-- Device Status Distribution -->
-      <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-gray-900">Device Status</h3>
-          <button class="text-blue-600 hover:text-blue-800 text-sm" on:click={goToDevicePage}>
-            View All →
-          </button>
-        </div>
-        <div class="flex items-center justify-center h-48">
-          {#if deviceStatusChartData.length > 0}
-            {@const chartPaths = generatePieChartPath(deviceStatusChartData)}
-            <div class="relative">
-              <svg width="180" height="180" viewBox="0 0 180 180">
-                {#each chartPaths as item}
-                  <path d={item.path} fill={item.color} opacity="0.8" />
-                {/each}
-                <text x="90" y="85" text-anchor="middle" class="text-lg font-bold fill-gray-900">
-                  {deviceInsights.totalDevices}
-                </text>
-                <text x="90" y="100" text-anchor="middle" class="text-sm fill-gray-600">
-                  Total Devices
-                </text>
-              </svg>
-            </div>
-          {:else}
-            <div class="text-gray-500">No data available</div>
-          {/if}
-        </div>
-        <div class="grid grid-cols-2 gap-2 mt-4">
-          {#each deviceStatusChartData as item}
-            <div class="flex items-center">
-              <div class="w-3 h-3 rounded mr-2" style="background-color: {item.color}"></div>
-              <span class="text-sm text-gray-600">{item.name} ({item.value})</span>
-            </div>
-          {/each}
-        </div>
-      </div>
+    <!-- Device Status Section with Recent Devices -->
+    
 
-      <!-- Recently Added Devices -->
-      <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold text-gray-900">Recent Devices</h3>
-          <span class="text-sm text-gray-500">Last 7 days</span>
-        </div>
-        <div class="space-y-3">
-          {#if deviceInsights.recentlyAdded.length > 0}
-            {#each deviceInsights.recentlyAdded as device}
-              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <div class="font-medium text-gray-900">{device.device_id}</div>
-                  <div class="text-sm text-gray-600">{device.device_name || 'Unnamed'}</div>
-                </div>
-                <div class="text-right">
-                  <div class="text-sm font-medium text-green-600">
-                    {device.motor_status === 1 ? 'Online' : 'Offline'}
-                  </div>
-                  <div class="text-xs text-gray-500">
-                    {formatDate(device.created_at || device.installation_date)}
-                  </div>
-                </div>
-              </div>
-            {/each}
-          {:else}
-            <div class="text-center text-gray-500 py-8">
-              No recent devices added
-            </div>
-          {/if}
-        </div>
-      </div>
 
-      <!-- Alerts and Notifications -->
-      <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">System Alerts</h3>
-        <div class="space-y-3">
-          {#if deviceInsights.blockedDevices > 0}
-            <div class="flex items-center p-3 bg-red-50 border border-red-200 rounded-lg">
-              <div class="bg-red-100 p-2 rounded-lg mr-3">
-                <svg class="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-                </svg>
-              </div>
-              <div>
-                <div class="font-medium text-red-900">{deviceInsights.blockedDevices} Blocked Devices</div>
-                <div class="text-sm text-red-700">Devices blocked from operation</div>
-              </div>
-            </div>
-          {/if}
-
-          {#if deviceInsights.expiringSubscriptions > 0}
-            <div class="flex items-center p-3 bg-orange-50 border border-orange-200 rounded-lg">
-              <div class="bg-orange-100 p-2 rounded-lg mr-3">
-                <svg class="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
-                </svg>
-              </div>
-              <div>
-                <div class="font-medium text-orange-900">{deviceInsights.expiringSubscriptions} Expiring Soon</div>
-                <div class="text-sm text-orange-700">Subscriptions expire in 7 days</div>
-              </div>
-            </div>
-          {/if}
-
-          {#if deviceInsights.errorDevices > 0}
-            <div class="flex items-center p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div class="bg-yellow-100 p-2 rounded-lg mr-3">
-                <svg class="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path>
-                </svg>
-              </div>
-              <div>
-                <div class="font-medium text-yellow-900">{deviceInsights.errorDevices} Device Errors</div>
-                <div class="text-sm text-yellow-700">Devices reporting errors</div>
-              </div>
-            </div>
-          {/if}
-
-          {#if deviceInsights.blockedDevices === 0 && deviceInsights.expiringSubscriptions === 0 && deviceInsights.errorDevices === 0}
-            <div class="text-center text-gray-500 py-8">
-              <svg class="w-12 h-12 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              All systems running smoothly!
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <!-- Monthly Growth Chart -->
       <div class="bg-white rounded-lg shadow p-6">
@@ -706,11 +579,11 @@
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Total Gateways -->
-        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToGatewaysPage}>
+        <div class="bg-gradient-to-br  rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToGatewaysPage}>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-purple-700">Total Gateways</p>
-              <p class="text-2xl font-bold text-purple-900">
+              <p class="text-sm font-medium text-gray-900">Total Gateways</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingGatewayStats}
                   <div class="animate-pulse bg-purple-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -727,11 +600,11 @@
         </div>
 
         <!-- Active Gateways -->
-        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
+        <div class="bg-gradient-to-br  rounded-lg p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-green-700">Active</p>
-              <p class="text-2xl font-bold text-green-900">
+              <p class="text-sm font-medium text-gray-900">Active</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingGatewayStats}
                   <div class="animate-pulse bg-green-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -751,11 +624,11 @@
         </div>
 
         <!-- Inactive Gateways -->
-        <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4">
+        <div class="bg-gradient-to-br  rounded-lg p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-red-700">Inactive</p>
-              <p class="text-2xl font-bold text-red-900">
+              <p class="text-sm font-medium text-gray-900">Inactive</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingGatewayStats}
                   <div class="animate-pulse bg-red-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -775,11 +648,11 @@
         </div>
 
         <!-- Connected Devices -->
-        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
+        <div class="bg-gradient-to-br  rounded-lg p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-blue-700">Connected Devices</p>
-              <p class="text-2xl font-bold text-blue-900">
+              <p class="text-sm font-medium text-gray-900">Connected Devices</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingGatewayStats}
                   <div class="animate-pulse bg-blue-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -798,7 +671,7 @@
       </div>
 
       <!-- Gateway Status Summary -->
-      {#if !isLoadingGatewayStats}
+      <!-- {#if !isLoadingGatewayStats}
         <div class="mt-6 pt-6 border-t border-gray-200">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-6">
@@ -822,7 +695,7 @@
             </div>
           </div>
         </div>
-      {/if}
+      {/if} -->
     </div>
 
     <!-- Enhanced Seller Management Section -->
@@ -852,11 +725,11 @@
 
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <!-- Total Sellers -->
-        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+        <div class="bg-gradient-to-br  rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-indigo-700">Total Sellers</p>
-              <p class="text-2xl font-bold text-indigo-900">
+              <p class="text-sm font-medium text-gray-900">Total Sellers</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingSellerStats}
                   <div class="animate-pulse bg-indigo-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -874,11 +747,11 @@
         </div>
 
         <!-- Approved Sellers -->
-        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+        <div class="bg-gradient-to-br  rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-green-700">Approved</p>
-              <p class="text-2xl font-bold text-green-900">
+              <p class="text-sm font-medium text-gray-900">Approved</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingSellerStats}
                   <div class="animate-pulse bg-green-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -898,11 +771,11 @@
         </div>
 
         <!-- Pending Sellers -->
-        <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+        <div class="bg-gradient-to-br  rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-orange-700">Pending Review</p>
-              <p class="text-2xl font-bold text-orange-900">
+              <p class="text-sm font-medium text-gray-900">Pending Review</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingSellerStats}
                   <div class="animate-pulse bg-orange-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -922,11 +795,11 @@
         </div>
 
         <!-- Rejected Sellers -->
-        <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+        <div class="bg-gradient-to-br  rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm font-medium text-red-700">Rejected</p>
-              <p class="text-2xl font-bold text-red-900">
+              <p class="text-sm font-medium text-gray-900">Rejected</p>
+              <p class="text-2xl font-bold text-gray-900">
                 {#if isLoadingSellerStats}
                   <div class="animate-pulse bg-red-300 h-6 w-12 rounded"></div>
                 {:else}
@@ -947,26 +820,26 @@
       </div>
 
       <!-- Seller Approval Flow -->
-      {#if !isLoadingSellerStats}
+      <!-- {#if !isLoadingSellerStats}
         <div class="mt-6 pt-6 border-t border-gray-200">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-8">
               <div class="text-center">
-                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <div class="w-10 h-10  rounded-full flex items-center justify-center mx-auto mb-2">
                   <span class="text-blue-600 font-bold">{sellerStats.total}</span>
                 </div>
                 <span class="text-xs text-gray-600">Registered</span>
               </div>
               <div class="flex-1 h-0.5 bg-gray-300"></div>
               <div class="text-center">
-                <div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <div class="w-10 h-10  rounded-full flex items-center justify-center mx-auto mb-2">
                   <span class="text-orange-600 font-bold">{sellerStats.pending}</span>
                 </div>
                 <span class="text-xs text-gray-600">Pending</span>
               </div>
               <div class="flex-1 h-0.5 bg-gray-300"></div>
               <div class="text-center">
-                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <div class="w-10 h-10  rounded-full flex items-center justify-center mx-auto mb-2">
                   <span class="text-green-600 font-bold">{sellerStats.approved}</span>
                 </div>
                 <span class="text-xs text-gray-600">Approved</span>
@@ -982,7 +855,80 @@
             </div>
           </div>
         </div>
-      {/if}
+      {/if} -->
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- Device Status Distribution -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Device Status</h3>
+          <button class="text-blue-600 hover:text-blue-800 text-sm" on:click={goToDevicePage}>
+            View All →
+          </button>
+        </div>
+        <div class="flex items-center justify-center h-48">
+          {#if deviceStatusChartData.length > 0}
+            {@const chartPaths = generatePieChartPath(deviceStatusChartData)}
+            <div class="relative">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                {#each chartPaths as item}
+                  <path d={item.path} fill={item.color} opacity="0.8" />
+                {/each}
+                <text x="90" y="85" text-anchor="middle" class="text-lg font-bold fill-gray-900">
+                  {deviceInsights.totalDevices}
+                </text>
+                <text x="90" y="100" text-anchor="middle" class="text-sm fill-gray-600">
+                  Total Devices
+                </text>
+              </svg>
+            </div>
+          {:else}
+            <div class="text-gray-500">No data available</div>
+          {/if}
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          {#each deviceStatusChartData as item}
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded mr-2" style="background-color: {item.color}"></div>
+              <span class="text-sm text-gray-600">{item.name} ({item.value})</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Recently Added Devices -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Recent Devices</h3>
+          <span class="text-sm text-gray-500">Last 7 days</span>
+        </div>
+        <div class="space-y-3">
+          {#if deviceInsights.recentlyAdded.length > 0}
+            {#each deviceInsights.recentlyAdded as device}
+              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div class="font-medium text-gray-900">{device.device_id}</div>
+                  <div class="text-sm text-gray-600">{device.device_name || 'Unnamed'}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-sm font-medium text-green-600">
+                    {device.motor_status === 1 ? 'Online' : 'Offline'}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {formatDate(device.created_at || device.installation_date)}
+                  </div>
+                </div>
+              </div>
+            {/each}
+          {:else}
+            <div class="text-center text-gray-500 py-8">
+              No recent devices added
+            </div>
+          {/if}
+        </div>
+      </div>
     </div>
 
     <!-- Quick Actions -->
