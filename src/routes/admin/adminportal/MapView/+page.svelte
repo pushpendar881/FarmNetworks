@@ -17,7 +17,7 @@
   let showDevices = true;
   let statusFilter = 'all'; // all, active, inactive
   let deviceStatusFilter = 'all'; // all, online, offline
-  let mapType = 'street'; // street, satellite
+  let mapType = 'satellite'; // street, satellite
 
   // Statistics
   let stats = {

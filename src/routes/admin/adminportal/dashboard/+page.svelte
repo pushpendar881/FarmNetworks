@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import { fade, fly } from 'svelte/transition';
   import {
     dashboardOverview,
     monthlyGrowthData,
@@ -15,17 +16,54 @@
   } from '$lib/stores/admin/dashboard.js';
   import Header from '$lib/components/Header.svelte';
   import { supabase } from '$lib/supabase.js';
+  import { goto } from '$app/navigation';
 
   let currentTime = new Date().toLocaleString();
   let timeInterval;
   let unsubscribeRealtime;
 
-  // Commission management state
-  let currentCommission = 0;
-  let newCommissionRate = 0;
-  let isUpdatingCommission = false;
-  let commissionError = null;
-  let commissionSuccess = false;
+  // Device data from database
+  let devices = [];
+  let gateways = [];
+  let users = [];
+  let subscriptions = [];
+  let recentDeviceActivities = [];
+
+  // Seller stats state
+  let sellerStats = {
+    total: 0,
+    approved: 0,
+    pending: 0,
+    rejected: 0
+  };
+  let isLoadingSellerStats = false;
+
+  // Gateway stats state
+  let gatewayStats = {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    maintenance: 0,
+    totalDevices: 0
+  };
+  let isLoadingGatewayStats = false;
+
+  // Device insights
+  let deviceInsights = {
+    totalDevices: 0,
+    onlineDevices: 0,
+    offlineDevices: 0,
+    blockedDevices: 0,
+    errorDevices: 0,
+    expiringSubscriptions: 0,
+    deviceTypes: {},
+    recentlyAdded: []
+  };
+
+  // Chart data
+  let deviceStatusChartData = [];
+  let deviceTypeChartData = [];
+  let subscriptionStatusData = [];
 
   onMount(async () => {
     // Update current time every second
@@ -35,7 +73,9 @@
 
     // Initial data fetch
     await fetchAllDashboardData();
-    await fetchCurrentCommission();
+    await fetchSellerStats();
+    await fetchGatewayStats();
+    await fetchDeviceInsights();
 
     // Start auto-refresh every 30 seconds
     startAutoRefresh(30000);
@@ -54,148 +94,282 @@
     }
   });
 
-  // Alternative approach using JavaScript only (without SQL function)
+  // Fetch comprehensive device insights
+  async function fetchDeviceInsights() {
+    try {
+      // Fetch devices
+      const { data: devicesData, error: devicesError } = await supabase
+        .from('devices')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-async function updateCommissionAlternative() {
-  // Validation
-  if (newCommissionRate < 0 || newCommissionRate > 100) {
-    commissionError = 'Commission rate must be between 0% and 100%';
-    return;
-  }
+      if (devicesError) throw devicesError;
+      devices = devicesData || [];
 
-  if (newCommissionRate === currentCommission) {
-    commissionError = 'New rate is same as current rate';
-    return;
-  }
+      // Fetch gateways
+      const { data: gatewaysData, error: gatewaysError } = await supabase
+        .from('gateways')
+        .select('*');
 
-  isUpdatingCommission = true;
-  commissionError = null;
-  commissionSuccess = false;
+      if (gatewaysError) throw gatewaysError;
+      gateways = gatewaysData || [];
 
-  try {
-    // Step 1: Get current active commission (if any)
-    const { data: currentCommissions, error: fetchError } = await supabase
-      .from('commissions')
-      .select('id')
-      .eq('is_active', true);
+      // Fetch subscriptions
+      const { data: subscriptionsData, error: subscriptionsError } = await supabase
+        .from('subscriptions')
+        .select('*');
 
-    if (fetchError) throw fetchError;
+      if (subscriptionsError) throw subscriptionsError;
+      subscriptions = subscriptionsData || [];
 
-    // Step 2: Deactivate current active commissions (if any exist)
-    if (currentCommissions && currentCommissions.length > 0) {
-      const commissionIds = currentCommissions.map(c => c.id);
+      // Calculate insights
+      calculateDeviceInsights();
       
-      const { error: deactivateError } = await supabase
-        .from('commissions')
-        .update({ 
-          is_active: false, 
-          updated_at: new Date().toISOString() 
-        })
-        .in('id', commissionIds);
-
-      if (deactivateError) throw deactivateError;
+    } catch (err) {
+      console.error('Error fetching device insights:', err);
     }
-
-    // Step 3: Insert new active commission
-    const { error: insertError } = await supabase
-      .from('commissions')
-      .insert({
-        rate: newCommissionRate,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
-
-    if (insertError) throw insertError;
-
-    // Update local state
-    currentCommission = newCommissionRate;
-    commissionSuccess = true;
-
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      commissionSuccess = false;
-    }, 3000);
-
-  } catch (err) {
-    console.error('Error updating commission:', err);
-    
-    // Handle specific error types
-    if (err.code === '23505') { // Unique constraint violation
-      commissionError = 'Commission update failed due to a conflict. Please refresh and try again.';
-    } else if (err.code === '23514') { // Check constraint violation
-      commissionError = 'Invalid commission rate. Must be between 0 and 100.';
-    } else if (err.message.includes('duplicate key')) {
-      commissionError = 'Another active commission already exists. Please refresh and try again.';
-    } else {
-      commissionError = `Failed to update commission rate: ${err.message}`;
-    }
-  } finally {
-    isUpdatingCommission = false;
   }
-}
 
-// Also update the fetchCurrentCommission function to be more robust
-async function fetchCurrentCommissionRobust() {
-  try {
-    const { data, error } = await supabase
-      .from('commissions')
-      .select('rate, id')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1);
+  function calculateDeviceInsights() {
+    // Basic stats
+    deviceInsights.totalDevices = devices.length;
+    deviceInsights.onlineDevices = devices.filter(d => d.motor_status === 1).length;
+    deviceInsights.offlineDevices = devices.filter(d => d.motor_status === 0).length;
+    deviceInsights.blockedDevices = devices.filter(d => d.is_blocked === true).length;
+    deviceInsights.errorDevices = devices.filter(d => d.error_status > 0).length;
 
-    if (error) {
-      throw error;
-    }
+    // Device types distribution
+    deviceInsights.deviceTypes = devices.reduce((acc, device) => {
+      const type = device.device_type || 'Unknown';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {});
 
-    if (data && data.length > 0) {
-      currentCommission = parseFloat(data[0].rate);
-      newCommissionRate = currentCommission;
-      
-      // If there are multiple active commissions (shouldn't happen but just in case)
-      if (data.length > 1) {
-        console.warn('Multiple active commissions found. This should not happen.');
-      }
-    } else {
-      // No active commission found, set default
-      currentCommission = 0;
-      newCommissionRate = 0;
-    }
-  } catch (err) {
-    console.error('Error fetching commission:', err);
-    commissionError = 'Failed to fetch current commission rate';
+    // Recently added devices (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    deviceInsights.recentlyAdded = devices.filter(d => 
+      new Date(d.created_at || d.installation_date) > sevenDaysAgo
+    ).slice(0, 5);
+
+    // Expiring subscriptions (next 7 days)
+    const now = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
     
-    // Set defaults on error
-    currentCommission = 0;
-    newCommissionRate = 0;
-  }
-}
+    deviceInsights.expiringSubscriptions = subscriptions.filter(sub => {
+      const expiryDate = new Date(sub.valid_until);
+      return expiryDate > now && expiryDate < sevenDaysFromNow;
+    }).length;
 
-  function resetCommissionForm() {
-    newCommissionRate = currentCommission;
-    commissionError = null;
-    commissionSuccess = false;
+    // Update chart data
+    updateChartData();
+  }
+
+  function updateChartData() {
+    // Device status chart data
+    deviceStatusChartData = [
+      { name: 'Online', value: deviceInsights.onlineDevices, color: '#10B981' },
+      { name: 'Offline', value: deviceInsights.offlineDevices, color: '#EF4444' },
+      { name: 'Blocked', value: deviceInsights.blockedDevices, color: '#F59E0B' },
+      { name: 'Error', value: deviceInsights.errorDevices, color: '#8B5CF6' }
+    ];
+
+    // Device type chart data
+    deviceTypeChartData = Object.entries(deviceInsights.deviceTypes).map(([type, count]) => ({
+      name: type,
+      value: count,
+      color: getColorForDeviceType(type)
+    }));
+
+    // Subscription status data
+    const activeSubscriptions = subscriptions.filter(sub => new Date(sub.valid_until) > new Date()).length;
+    const expiredSubscriptions = subscriptions.filter(sub => new Date(sub.valid_until) <= new Date()).length;
+    
+    subscriptionStatusData = [
+      { name: 'Active', value: activeSubscriptions, color: '#10B981' },
+      { name: 'Expired', value: expiredSubscriptions, color: '#EF4444' },
+      { name: 'Expiring Soon', value: deviceInsights.expiringSubscriptions, color: '#F59E0B' }
+    ];
+  }
+
+  function getColorForDeviceType(type) {
+    const colors = {
+      'motor_controller': '#3B82F6',
+      'sensor': '#10B981', 
+      'gateway': '#8B5CF6',
+      'Unknown': '#6B7280'
+    };
+    return colors[type] || '#6B7280';
+  }
+
+  // Fetch seller statistics
+  async function fetchSellerStats() {
+    isLoadingSellerStats = true;
+    
+    try {
+      // Get total count
+      const { count: totalCount, error: totalError } = await supabase
+        .from('seller_profiles')
+        .select('id', { count: 'exact', head: true });
+
+      if (totalError) throw totalError;
+
+      // Get approved count
+      const { count: approvedCount, error: approvedError } = await supabase
+        .from('seller_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('approval_status', 'approved');
+
+      if (approvedError) throw approvedError;
+
+      // Get pending count
+      const { count: pendingCount, error: pendingError } = await supabase
+        .from('seller_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('approval_status', 'pending');
+
+      if (pendingError) throw pendingError;
+
+      // Get rejected count
+      const { count: rejectedCount, error: rejectedError } = await supabase
+        .from('seller_profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('approval_status', 'rejected');
+
+      if (rejectedError) throw rejectedError;
+
+      sellerStats = {
+        total: totalCount || 0,
+        approved: approvedCount || 0,
+        pending: pendingCount || 0,
+        rejected: rejectedCount || 0
+      };
+    } catch (err) {
+      console.error('Error fetching seller stats:', err);
+    } finally {
+      isLoadingSellerStats = false;
+    }
+  }
+
+  // Fetch gateway statistics
+  async function fetchGatewayStats() {
+    isLoadingGatewayStats = true;
+    
+    try {
+      // Get total gateway count
+      const { count: totalCount, error: totalError } = await supabase
+        .from('gateways')
+        .select('id', { count: 'exact', head: true });
+
+      if (totalError) throw totalError;
+
+      // Get active gateway count
+      const { count: activeCount, error: activeError } = await supabase
+        .from('gateways')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      if (activeError) throw activeError;
+
+      // Get inactive gateway count
+      const { count: inactiveCount, error: inactiveError } = await supabase
+        .from('gateways')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'inactive');
+
+      if (inactiveError) throw inactiveError;
+
+      // Get maintenance gateway count
+      const { count: maintenanceCount, error: maintenanceError } = await supabase
+        .from('gateways')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'maintenance');
+
+      if (maintenanceError) throw maintenanceError;
+
+      // Get total devices connected to gateways
+      const { count: totalDevicesCount, error: devicesError } = await supabase
+        .from('devices')
+        .select('id', { count: 'exact', head: true })
+        .not('gateway_id', 'is', null);
+
+      if (devicesError) throw devicesError;
+
+      gatewayStats = {
+        total: totalCount || 0,
+        active: activeCount || 0,
+        inactive: inactiveCount || 0,
+        maintenance: maintenanceCount || 0,
+        totalDevices: totalDevicesCount || 0
+      };
+    } catch (err) {
+      console.error('Error fetching gateway stats:', err);
+    } finally {
+      isLoadingGatewayStats = false;
+    }
+  }
+
+  // Navigation functions
+  function goToDevicePage() {
+    goto('/admin/adminportal/devices/');
+  }
+
+  function goToSellersPage() {
+    goto('/admin/adminportal/sellers/');
+  }
+
+  function goToGatewaysPage() {
+    goto('/admin/adminportal/gateways/');
   }
 
   function getChangeColor(change) {
     return change.startsWith('+') ? 'text-green-600' : 'text-red-600';
   }
 
-  function getAlertIcon(type) {
-    if (type === 'offline') {
-      return `<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>`;
-    } else if (type === 'recharge') {
-      return `<path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path>`;
-    }
-    // Default warning icon
-    return `<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>`;
+  function formatDate(dateString) {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   }
 
-  function getAlertColor(type) {
-    if (type === 'offline') return 'text-red-500';
-    if (type === 'recharge') return 'text-orange-500';
-    return 'text-yellow-500';
+  // Generate pie chart path for SVG
+  function generatePieChartPath(data, startAngle = 0) {
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    if (total === 0) return [];
+    
+    let currentAngle = startAngle;
+    const radius = 70;
+    const centerX = 90;
+    const centerY = 90;
+    
+    return data.map(item => {
+      const percentage = (item.value / total) * 100;
+      const angle = (percentage / 100) * 360;
+      
+      const startX = centerX + radius * Math.cos((currentAngle - 90) * Math.PI / 180);
+      const startY = centerY + radius * Math.sin((currentAngle - 90) * Math.PI / 180);
+      
+      const endAngle = currentAngle + angle;
+      const endX = centerX + radius * Math.cos((endAngle - 90) * Math.PI / 180);
+      const endY = centerY + radius * Math.sin((endAngle - 90) * Math.PI / 180);
+      
+      const largeArc = angle > 180 ? 1 : 0;
+      
+      const pathData = `M ${centerX} ${centerY} L ${startX} ${startY} A ${radius} ${radius} 0 ${largeArc} 1 ${endX} ${endY} Z`;
+      
+      currentAngle = endAngle;
+      
+      return {
+        ...item,
+        path: pathData,
+        percentage: percentage.toFixed(1)
+      };
+    });
   }
 </script>
 
@@ -211,20 +385,20 @@ async function fetchCurrentCommissionRobust() {
       </div>
     {/if}
 
-    <!-- Commission Management Section -->
-  
+    <!-- Current Time Display -->
+    <div class="text-right text-sm text-gray-500 mb-4">
+      Last updated: {currentTime}
+    </div>
 
     <!-- Top Metrics Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <!-- Total Devices -->
-      <div class="bg-white rounded-lg shadow p-6">
+      <!-- Total Devices - Clickable -->
+      <div class="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105" on:click={goToDevicePage}>
         <div class="flex items-center justify-between">
           <div>
             <p class="text-sm font-medium text-gray-600">Total Devices</p>
-            <p class="text-3xl font-bold text-gray-900">{$dashboardOverview.totalDevices.toLocaleString()}</p>
-            <p class="text-sm {getChangeColor($dashboardOverview.totalDevicesChange)} mt-1">
-              {$dashboardOverview.totalDevicesChange} from last month
-            </p>
+            <p class="text-3xl font-bold text-gray-900">{deviceInsights.totalDevices.toLocaleString()}</p>
+            <p class="text-sm text-blue-600 mt-1">Click to manage</p>
           </div>
           <div class="bg-blue-100 p-3 rounded-lg">
             <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,14 +408,14 @@ async function fetchCurrentCommissionRobust() {
         </div>
       </div>
 
-      <!-- Active Masters -->
-      <div class="bg-white rounded-lg shadow p-6">
+      <!-- Online Devices - Clickable -->
+      <div class="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105" on:click={goToDevicePage}>
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm font-medium text-gray-600">Active Masters</p>
-            <p class="text-3xl font-bold text-gray-900">{$dashboardOverview.activeMasters}</p>
-            <p class="text-sm {getChangeColor($dashboardOverview.activeMastersChange)} mt-1">
-              {$dashboardOverview.activeMastersChange} from last month
+            <p class="text-sm font-medium text-gray-600">Online Devices</p>
+            <p class="text-3xl font-bold text-green-600">{deviceInsights.onlineDevices}</p>
+            <p class="text-sm text-green-600 mt-1">
+              {deviceInsights.totalDevices > 0 ? `${Math.round((deviceInsights.onlineDevices / deviceInsights.totalDevices) * 100)}%` : '0%'} operational
             </p>
           </div>
           <div class="bg-green-100 p-3 rounded-lg">
@@ -252,39 +426,173 @@ async function fetchCurrentCommissionRobust() {
         </div>
       </div>
 
-      <!-- Monthly Earnings -->
-      <div class="bg-white rounded-lg shadow p-6">
+      <!-- Issues Alert - Clickable -->
+      <div class="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105" 
+           class:bg-red-50={deviceInsights.offlineDevices > 0 || deviceInsights.errorDevices > 0}
+           on:click={goToDevicePage}>
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm font-medium text-gray-600">Monthly Earnings</p>
-            <p class="text-3xl font-bold text-gray-900">${$dashboardOverview.monthlyEarnings.toLocaleString()}</p>
-            <p class="text-sm {getChangeColor($dashboardOverview.monthlyEarningsChange)} mt-1">
-              {$dashboardOverview.monthlyEarningsChange} from last month
+            <p class="text-sm font-medium text-gray-600">Device Issues</p>
+            <p class="text-3xl font-bold text-red-600">{deviceInsights.offlineDevices + deviceInsights.errorDevices}</p>
+            <p class="text-sm text-red-600 mt-1">
+              {deviceInsights.offlineDevices} offline, {deviceInsights.errorDevices} errors
             </p>
           </div>
-          <div class="bg-green-100 p-3 rounded-lg">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+          <div class="bg-red-100 p-3 rounded-lg">
+            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
           </div>
         </div>
       </div>
 
-      <!-- Online Devices -->
-      <div class="bg-white rounded-lg shadow p-6">
+      <!-- Pending Sellers Card - Clickable -->
+      <div class="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105"
+           class:bg-orange-50={sellerStats.pending > 0}
+           on:click={goToSellersPage}>
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-sm font-medium text-gray-600">Online Devices</p>
-            <p class="text-3xl font-bold text-gray-900">{$dashboardOverview.onlineDevices}</p>
-            <p class="text-sm {getChangeColor($dashboardOverview.onlineDevicesChange)} mt-1">
-              {$dashboardOverview.onlineDevicesChange} from last month
+            <p class="text-sm font-medium text-gray-600">Pending Approvals</p>
+            <p class="text-3xl font-bold text-orange-600">{sellerStats.pending}</p>
+            <p class="text-sm text-orange-600 mt-1">
+              {sellerStats.pending === 0 ? 'All caught up!' : 'Needs attention'}
             </p>
           </div>
-          <div class="bg-green-100 p-3 rounded-lg">
-            <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          <div class="bg-orange-100 p-3 rounded-lg">
+            <svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
             </svg>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Device Insights Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <!-- Device Status Distribution -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Device Status</h3>
+          <button class="text-blue-600 hover:text-blue-800 text-sm" on:click={goToDevicePage}>
+            View All →
+          </button>
+        </div>
+        <div class="flex items-center justify-center h-48">
+          {#if deviceStatusChartData.length > 0}
+            {@const chartPaths = generatePieChartPath(deviceStatusChartData)}
+            <div class="relative">
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                {#each chartPaths as item}
+                  <path d={item.path} fill={item.color} opacity="0.8" />
+                {/each}
+                <text x="90" y="85" text-anchor="middle" class="text-lg font-bold fill-gray-900">
+                  {deviceInsights.totalDevices}
+                </text>
+                <text x="90" y="100" text-anchor="middle" class="text-sm fill-gray-600">
+                  Total Devices
+                </text>
+              </svg>
+            </div>
+          {:else}
+            <div class="text-gray-500">No data available</div>
+          {/if}
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          {#each deviceStatusChartData as item}
+            <div class="flex items-center">
+              <div class="w-3 h-3 rounded mr-2" style="background-color: {item.color}"></div>
+              <span class="text-sm text-gray-600">{item.name} ({item.value})</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Recently Added Devices -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Recent Devices</h3>
+          <span class="text-sm text-gray-500">Last 7 days</span>
+        </div>
+        <div class="space-y-3">
+          {#if deviceInsights.recentlyAdded.length > 0}
+            {#each deviceInsights.recentlyAdded as device}
+              <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div class="font-medium text-gray-900">{device.device_id}</div>
+                  <div class="text-sm text-gray-600">{device.device_name || 'Unnamed'}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-sm font-medium text-green-600">
+                    {device.motor_status === 1 ? 'Online' : 'Offline'}
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    {formatDate(device.created_at || device.installation_date)}
+                  </div>
+                </div>
+              </div>
+            {/each}
+          {:else}
+            <div class="text-center text-gray-500 py-8">
+              No recent devices added
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Alerts and Notifications -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">System Alerts</h3>
+        <div class="space-y-3">
+          {#if deviceInsights.blockedDevices > 0}
+            <div class="flex items-center p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div class="bg-red-100 p-2 rounded-lg mr-3">
+                <svg class="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="font-medium text-red-900">{deviceInsights.blockedDevices} Blocked Devices</div>
+                <div class="text-sm text-red-700">Devices blocked from operation</div>
+              </div>
+            </div>
+          {/if}
+
+          {#if deviceInsights.expiringSubscriptions > 0}
+            <div class="flex items-center p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div class="bg-orange-100 p-2 rounded-lg mr-3">
+                <svg class="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="font-medium text-orange-900">{deviceInsights.expiringSubscriptions} Expiring Soon</div>
+                <div class="text-sm text-orange-700">Subscriptions expire in 7 days</div>
+              </div>
+            </div>
+          {/if}
+
+          {#if deviceInsights.errorDevices > 0}
+            <div class="flex items-center p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div class="bg-yellow-100 p-2 rounded-lg mr-3">
+                <svg class="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="font-medium text-yellow-900">{deviceInsights.errorDevices} Device Errors</div>
+                <div class="text-sm text-yellow-700">Devices reporting errors</div>
+              </div>
+            </div>
+          {/if}
+
+          {#if deviceInsights.blockedDevices === 0 && deviceInsights.expiringSubscriptions === 0 && deviceInsights.errorDevices === 0}
+            <div class="text-center text-gray-500 py-8">
+              <svg class="w-12 h-12 text-green-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              All systems running smoothly!
+            </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -334,189 +642,453 @@ async function fetchCurrentCommissionRobust() {
         </div>
       </div>
 
-      <!-- Device Status Pie Chart -->
+      <!-- Subscription Status Chart -->
       <div class="bg-white rounded-lg shadow p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Device Status (Based on Motor Status)</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Subscription Status</h3>
         <div class="flex items-center justify-center h-64">
-          <div class="relative">
-            {#if $deviceStatusPercentages}
-              {@const onlinePercent = $deviceStatusPercentages.online}
-              {@const offlinePercent = $deviceStatusPercentages.offline}
-              {@const onlineCircumference = (onlinePercent / 100) * 439.82}
-              {@const offlineCircumference = (offlinePercent / 100) * 439.82}
-              
+          {#if subscriptionStatusData.length > 0}
+            {@const chartPaths = generatePieChartPath(subscriptionStatusData)}
+            <div class="relative">
               <svg width="180" height="180" viewBox="0 0 180 180">
-                <!-- Online devices -->
-                <circle
-                  cx="90"
-                  cy="90"
-                  r="70"
-                  fill="none"
-                  stroke="#10B981"
-                  stroke-width="20"
-                  stroke-dasharray="{onlineCircumference} {439.82 - onlineCircumference}"
-                  stroke-dashoffset="0"
-                  transform="rotate(-90 90 90)"
-                />
-                <!-- Offline devices -->
-                <circle
-                  cx="90"
-                  cy="90"
-                  r="70"
-                  fill="none"
-                  stroke="#EF4444"
-                  stroke-width="20"
-                  stroke-dasharray="{offlineCircumference} {439.82 - offlineCircumference}"
-                  stroke-dashoffset="-{onlineCircumference}"
-                  transform="rotate(-90 90 90)"
-                />
-                
-                <!-- Center text -->
+                {#each chartPaths as item}
+                  <path d={item.path} fill={item.color} opacity="0.8" />
+                {/each}
                 <text x="90" y="85" text-anchor="middle" class="text-lg font-bold fill-gray-900">
-                  {$deviceStatusData.online + $deviceStatusData.offline}
+                  {subscriptions.length}
                 </text>
                 <text x="90" y="100" text-anchor="middle" class="text-sm fill-gray-600">
-                  Total Devices
+                  Total Plans
                 </text>
               </svg>
-            {/if}
-          </div>
+            </div>
+          {:else}
+            <div class="text-gray-500">No subscription data</div>
+          {/if}
         </div>
         <div class="flex justify-center space-x-6 mt-4">
-          <div class="flex items-center">
-            <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-            <span class="text-sm text-gray-600">Online: {$deviceStatusData.online} ({$deviceStatusPercentages.online}%)</span>
-          </div>
-          <div class="flex items-center">
-            <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-            <span class="text-sm text-gray-600">Offline: {$deviceStatusData.offline} ({$deviceStatusPercentages.offline}%)</span>
-          </div>
+          {#each subscriptionStatusData as item}
+            <div class="flex items-center">
+              <div class="w-4 h-4 rounded mr-2" style="background-color: {item.color}"></div>
+              <span class="text-sm text-gray-600">
+                {item.name} ({item.value})
+              </span>
+            </div>
+          {/each}
         </div>
-        <div class="mt-4 text-xs text-gray-500 text-center">
-          <p><strong>Note:</strong> Online = motor_status = 1, Offline = motor_status = 0</p>
-        </div>
-
       </div>
     </div>
 
-    <!-- <div class="bg-white rounded-lg shadow p-6 mb-8">
-      <h3 class="text-lg font-semibold text-gray-900 mb-4">Commission Management</h3>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Current Commission Display 
-        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+    <!-- Gateway Statistics Section -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center">
+          <div class="bg-purple-100 p-2 rounded-lg mr-3">
+            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Gateway Management</h3>
+            <p class="text-sm text-gray-600">Network infrastructure overview</p>
+          </div>
+        </div>
+        <button
+          on:click={goToGatewaysPage}
+          class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center"
+        >
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+          Manage Gateways
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Total Gateways -->
+        <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToGatewaysPage}>
           <div class="flex items-center justify-between">
             <div>
-              <h4 class="text-sm font-medium text-gray-700">Current Commission Rate</h4>
-              <p class="text-3xl font-bold text-indigo-600">{currentCommission}%</p>
-              <p class="text-sm text-gray-500 mt-1">Applied to all new subscriptions</p>
+              <p class="text-sm font-medium text-purple-700">Total Gateways</p>
+              <p class="text-2xl font-bold text-purple-900">
+                {#if isLoadingGatewayStats}
+                  <div class="animate-pulse bg-purple-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {gatewayStats.total}
+                {/if}
+              </p>
             </div>
-            <div class="bg-indigo-100 p-3 rounded-full">
-              <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+            <div class="bg-purple-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
               </svg>
             </div>
           </div>
         </div>
 
-        <!-- Update Commission Form 
-        <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <h4 class="text-sm font-medium text-gray-700 mb-4">Update Commission Rate</h4>
-          
-          <!-- Success Message 
-          {#if commissionSuccess}
-            <div class="bg-green-100 border border-green-400 text-green-700 px-3 py-2 rounded mb-4 text-sm">
-              ✅ Commission rate updated successfully!
-            </div>
-          {/if}
-
-          <!-- Error Message 
-          {#if commissionError}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded mb-4 text-sm">
-              ❌ {commissionError}
-            </div>
-          {/if}
-
-          <div class="space-y-4">
+        <!-- Active Gateways -->
+        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4">
+          <div class="flex items-center justify-between">
             <div>
-              <label for="commission-rate" class="block text-sm font-medium text-gray-700 mb-2">
-                New Commission Rate (%)
-              </label>
-              <div class="relative">
-                <input
-                  id="commission-rate"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  bind:value={newCommissionRate}
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter rate (0-100)"
-                  disabled={isUpdatingCommission}
-                />
-                <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span class="text-gray-500 text-sm">%</span>
-                </div>
-              </div>
-              <p class="text-xs text-gray-500 mt-1">Enter a value between 0 and 100</p>
-            </div>
-
-            <div class="flex space-x-3">
-              <button
-                on:click={updateCommission}
-                disabled={isUpdatingCommission || newCommissionRate === currentCommission}
-                class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {#if isUpdatingCommission}
-                  <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Updating...
+              <p class="text-sm font-medium text-green-700">Active</p>
+              <p class="text-2xl font-bold text-green-900">
+                {#if isLoadingGatewayStats}
+                  <div class="animate-pulse bg-green-300 h-6 w-12 rounded"></div>
                 {:else}
-                  Update Rate
+                  {gatewayStats.active}
                 {/if}
-              </button>
+              </p>
+              <p class="text-xs text-green-600 mt-1">
+                {gatewayStats.total > 0 ? `${Math.round((gatewayStats.active / gatewayStats.total) * 100)}%` : '0%'} online
+              </p>
+            </div>
+            <div class="bg-green-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
 
-              <button
-                on:click={resetCommissionForm}
-                disabled={isUpdatingCommission}
-                class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                Reset
-              </button>
+        <!-- Inactive Gateways -->
+        <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-red-700">Inactive</p>
+              <p class="text-2xl font-bold text-red-900">
+                {#if isLoadingGatewayStats}
+                  <div class="animate-pulse bg-red-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {gatewayStats.inactive}
+                {/if}
+              </p>
+              <p class="text-xs text-red-600 mt-1">
+                {gatewayStats.inactive > 0 ? 'Needs attention' : 'All operational'}
+              </p>
+            </div>
+            <div class="bg-red-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connected Devices -->
+        <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-blue-700">Connected Devices</p>
+              <p class="text-2xl font-bold text-blue-900">
+                {#if isLoadingGatewayStats}
+                  <div class="animate-pulse bg-blue-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {gatewayStats.totalDevices}
+                {/if}
+              </p>
+              <p class="text-xs text-blue-600 mt-1">Via gateways</p>
+            </div>
+            <div class="bg-blue-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+              </svg>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Commission Info 
-      <div class="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-200">
-        <div class="flex items-start">
-          <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-          </svg>
+      <!-- Gateway Status Summary -->
+      {#if !isLoadingGatewayStats}
+        <div class="mt-6 pt-6 border-t border-gray-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-6">
+              <div class="flex items-center">
+                <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                <span class="text-sm text-gray-600">{gatewayStats.active} Active</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                <span class="text-sm text-gray-600">{gatewayStats.inactive} Inactive</span>
+              </div>
+              {#if gatewayStats.maintenance > 0}
+                <div class="flex items-center">
+                  <div class="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+                  <span class="text-sm text-gray-600">{gatewayStats.maintenance} Maintenance</span>
+                </div>
+              {/if}
+            </div>
+            <div class="text-sm text-gray-500">
+              Network Coverage: {gatewayStats.active > 0 ? 'Active' : 'Limited'}
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Enhanced Seller Management Section -->
+    <div class="bg-white rounded-lg shadow p-6 mb-8">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center">
+          <div class="bg-indigo-100 p-2 rounded-lg mr-3">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+            </svg>
+          </div>
           <div>
-            <h4 class="text-sm font-medium text-blue-900">Important Information</h4>
-            <div class="mt-1 text-sm text-blue-800">
-              <ul class="list-disc list-inside space-y-1">
-                <li>Commission changes apply to all new subscriptions immediately</li>
-                <li>Existing subscriptions retain their original commission rate</li>
-                <li>All commission rate changes are logged for audit purposes</li>
-                <li>Rate must be between 0% and 100%</li>
-              </ul>
+            <h3 class="text-lg font-semibold text-gray-900">Seller Management</h3>
+            <p class="text-sm text-gray-600">Manage seller profiles and approvals</p>
+          </div>
+        </div>
+        <button
+          on:click={goToSellersPage}
+          class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center"
+        >
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+          </svg>
+          Manage Sellers
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Total Sellers -->
+        <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-indigo-700">Total Sellers</p>
+              <p class="text-2xl font-bold text-indigo-900">
+                {#if isLoadingSellerStats}
+                  <div class="animate-pulse bg-indigo-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {sellerStats.total}
+                {/if}
+              </p>
+              <p class="text-xs text-indigo-600 mt-1">All registered</p>
+            </div>
+            <div class="bg-indigo-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Approved Sellers -->
+        <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-green-700">Approved</p>
+              <p class="text-2xl font-bold text-green-900">
+                {#if isLoadingSellerStats}
+                  <div class="animate-pulse bg-green-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {sellerStats.approved}
+                {/if}
+              </p>
+              <p class="text-xs text-green-600 mt-1">
+                {sellerStats.total > 0 ? `${Math.round((sellerStats.approved / sellerStats.total) * 100)}%` : '0%'} approved
+              </p>
+            </div>
+            <div class="bg-green-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Sellers -->
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-orange-700">Pending Review</p>
+              <p class="text-2xl font-bold text-orange-900">
+                {#if isLoadingSellerStats}
+                  <div class="animate-pulse bg-orange-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {sellerStats.pending}
+                {/if}
+              </p>
+              <p class="text-xs text-orange-600 mt-1">
+                {sellerStats.pending === 0 ? 'All reviewed' : 'Action needed'}
+              </p>
+            </div>
+            <div class="bg-orange-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rejected Sellers -->
+        <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow" on:click={goToSellersPage}>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-red-700">Rejected</p>
+              <p class="text-2xl font-bold text-red-900">
+                {#if isLoadingSellerStats}
+                  <div class="animate-pulse bg-red-300 h-6 w-12 rounded"></div>
+                {:else}
+                  {sellerStats.rejected}
+                {/if}
+              </p>
+              <p class="text-xs text-red-600 mt-1">
+                {sellerStats.rejected === 0 ? 'None rejected' : 'Review needed'}
+              </p>
+            </div>
+            <div class="bg-red-200 p-2 rounded-lg">
+              <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
             </div>
           </div>
         </div>
       </div>
-    </div> -->
+
+      <!-- Seller Approval Flow -->
+      {#if !isLoadingSellerStats}
+        <div class="mt-6 pt-6 border-t border-gray-200">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-8">
+              <div class="text-center">
+                <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-blue-600 font-bold">{sellerStats.total}</span>
+                </div>
+                <span class="text-xs text-gray-600">Registered</span>
+              </div>
+              <div class="flex-1 h-0.5 bg-gray-300"></div>
+              <div class="text-center">
+                <div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-orange-600 font-bold">{sellerStats.pending}</span>
+                </div>
+                <span class="text-xs text-gray-600">Pending</span>
+              </div>
+              <div class="flex-1 h-0.5 bg-gray-300"></div>
+              <div class="text-center">
+                <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span class="text-green-600 font-bold">{sellerStats.approved}</span>
+                </div>
+                <span class="text-xs text-gray-600">Approved</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-medium text-gray-900">
+                Approval Rate: {sellerStats.total > 0 ? Math.round((sellerStats.approved / sellerStats.total) * 100) : 0}%
+              </div>
+              <div class="text-xs text-gray-500">
+                {sellerStats.pending} awaiting review
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="bg-white rounded-lg shadow p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button 
+          class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+          on:click={goToDevicePage}
+        >
+          <div class="text-center">
+            <svg class="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+            <div class="text-sm font-medium text-gray-900">Manage Devices</div>
+            <div class="text-xs text-gray-500">View all devices</div>
+          </div>
+        </button>
+        
+        <button 
+          class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
+          on:click={goToSellersPage}
+        >
+          <div class="text-center">
+            <svg class="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+            </svg>
+            <div class="text-sm font-medium text-gray-900">Review Sellers</div>
+            <div class="text-xs text-gray-500">
+              {sellerStats.pending > 0 ? `${sellerStats.pending} pending` : 'All reviewed'}
+            </div>
+          </div>
+        </button>
+        
+        <button 
+          class="flex items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors"
+          on:click={goToGatewaysPage}
+        >
+          <div class="text-center">
+            <svg class="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+            </svg>
+            <div class="text-sm font-medium text-gray-900">Check Gateways</div>
+            <div class="text-xs text-gray-500">
+              {gatewayStats.inactive > 0 ? `${gatewayStats.inactive} offline` : 'All online'}
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    {#if $isLoading}
+      <div class="fixed inset-0 bg-white bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+          <svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span class="text-gray-900 font-medium">Loading dashboard data...</span>
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
 
 <style>
-  /* Custom styles for better visual appeal */
-  .text-xs {
-    font-size: 0.75rem;
-    line-height: 1rem;
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: .5;
+    }
+  }
+
+  /* Hover animations */
+  .hover\:scale-105:hover {
+    transform: scale(1.05);
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .grid.grid-cols-1.md\:grid-cols-4 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid.grid-cols-1.lg\:grid-cols-3 {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

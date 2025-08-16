@@ -3,6 +3,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { tick } from 'svelte';
   import { supabase } from '$lib/supabase.js';
+  import { goto } from '$app/navigation';
+
 
   // Main state variables
   let sellers = [];
@@ -19,7 +21,7 @@
   let searchTerm = '';
   let statusFilter = 'all';
   let approvalFilter = 'all';
-let statusFilter2 = 'all'; // Add this new filter for blocked status
+// let statusFilter2 = 'all'; // Add this new filter for blocked status
   let cityFilter = 'all';
   let stateFilter = 'all';
   let businessTypeFilter = 'all';
@@ -56,30 +58,32 @@ let statusFilter2 = 'all'; // Add this new filter for blocked status
   $: uniqueBusinessTypes = [...new Set(sellers.map(s => s.business_type).filter(Boolean))].sort();
 
   // Filter sellers
-  $: filteredSellers = sellers.filter(seller => {
-    const matchesSearch = seller.business_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         seller.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         seller.state?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         seller.gstin?.toLowerCase().includes(searchTerm.toLowerCase());
+ // Fixed search - case insensitive and handles empty search
+$: filteredSellers = sellers.filter(seller => {
+    // Search logic - case insensitive
+    const matchesSearch = !searchTerm || 
+        seller.business_name?.toLowerCase().trim().includes(searchTerm.toLowerCase()) || 
+        seller.city?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
+        seller.state?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
+        seller.user_profiles?.full_name?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
+        seller.user_profiles?.email?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
+        seller.gstin?.toLowerCase().trim().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || 
                          (statusFilter === 'active' && seller.approval_status === 'approved') ||
+                         (statusFilter === 'blocked' && seller.approval_status === 'blocked') ||
                          (statusFilter === 'inactive' && seller.approval_status !== 'approved');
     
     const matchesApproval = approvalFilter === 'all' ||
                        (approvalFilter === 'approved' && seller.approval_status === 'approved') ||
                        (approvalFilter === 'pending' && seller.approval_status === 'pending');
 
-const matchesStatus2 = statusFilter2 === 'all' ||
-                      (statusFilter2 === 'blocked' && seller.approval_status === 'blocked') ||
-                      (statusFilter2 === 'active' && seller.approval_status !== 'blocked');
-
-const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
+    const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
     const matchesState = stateFilter === 'all' || seller.state === stateFilter;
     const matchesBusinessType = businessTypeFilter === 'all' || seller.business_type === businessTypeFilter;
     
-    return matchesSearch && matchesStatus && matchesApproval && matchesStatus2 && matchesCity && matchesState && matchesBusinessType;
-  });
+    return matchesSearch && matchesStatus && matchesApproval && matchesCity && matchesState && matchesBusinessType;
+});
 
   onMount(async () => {
     await initializeComponent();
@@ -89,6 +93,8 @@ const matchesCity = cityFilter === 'all' || seller.city === cityFilter;
   onDestroy(() => {
     destroyCharts();
   });
+
+  
 
   async function fetchCurrentCommission() {
   try {
@@ -637,6 +643,11 @@ async function unblockSeller(sellerId) {
       renderEarningsChart();
     }, 100);
   }
+
+  function viewsellerDetails(sellerId) {
+  console.log('Navigating to seller details:', sellerId);
+  goto(`/admin/adminportal/sellers/${sellerId}`);
+}
 </script>
 
 <svelte:head>
@@ -794,6 +805,7 @@ async function unblockSeller(sellerId) {
         <option value="all">All Status</option>
         <option value="active">Active</option>
         <option value="inactive">Inactive</option>
+        <option value="blocked">Blocked</option>
       </select>
     </div>
 
@@ -826,14 +838,14 @@ async function unblockSeller(sellerId) {
       </select>
     </div>
 
-    <div class="dropdown-filter">
+    <!-- <div class="dropdown-filter">
       <span class="filter-label">Status</span>
-      <select bind:value={statusFilter2}>
+      <select bind:value={statusFilter}>
         <option value="all">All Status</option>
         <option value="active">Active</option>
         <option value="blocked">Blocked</option>
       </select>
-    </div>
+    </div> -->
 
     <!-- <div class="dropdown-filter">
       <!-- <span class="filter-label">Business Type</span> 
@@ -856,29 +868,29 @@ async function unblockSeller(sellerId) {
 
   <!-- Stats Cards -->
   <div class="stats-section">
-    <div class="stat-card">
+    <!-- <div class="stat-card">
       <div class="stat-content">
         <div class="stat-label">Total Sellers</div>
         <div class="stat-value">{totalSellers}</div>
         <div class="stat-detail">Registered sellers</div>
       </div>
-    </div>
+    </div> -->
 
-    <div class="stat-card approved">
+    <!-- <div class="stat-card approved">
       <div class="stat-content">
         <div class="stat-label">Approved Sellers</div>
         <div class="stat-value">{approvedSellers}</div>
         <div class="stat-detail">{totalSellers > 0 ? ((approvedSellers / totalSellers) * 100).toFixed(1) : 0}% of total</div>
       </div>
-    </div>
+    </div> -->
 
-    <div class="stat-card warning">
+    <!-- <div class="stat-card warning">
       <div class="stat-content">
         <div class="stat-label">Pending Approval</div>
         <div class="stat-value">{pendingSellers}</div>
         <div class="stat-detail">Awaiting approval</div>
       </div>
-    </div>
+    </div> -->
 
     <div class="stat-card">
       <div class="stat-content">
@@ -928,9 +940,7 @@ async function unblockSeller(sellerId) {
       </div>
     </div>
   </div>
-
   
-
   <!-- Charts Section -->
   <div class="charts-section">
     <div class="chart-container">
@@ -1045,6 +1055,9 @@ async function unblockSeller(sellerId) {
                 </td>
                 <td class="actions-cell">
                   <div class="action-buttons">
+                    <button class="view-details-btn" on:click={() => viewsellerDetails(seller.id)}>
+                      👁️ View Details
+                    </button>
                     {#if seller.approval_status === 'blocked'}
                       <button class="unblock-btn" on:click={() => unblockSeller(seller.id)}>
                         🔓 Unblock

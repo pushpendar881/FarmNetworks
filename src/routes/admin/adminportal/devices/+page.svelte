@@ -34,9 +34,9 @@ $: blockedDevices = devices.filter(d => d.is_blocked === true).length;
 
   // Filter devices
   $: filteredDevices = devices.filter(device => {
-  const matchesSearch = device.device_id?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                       device.device_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       device.farm_name?.toLowerCase().includes(searchTerm.toLowerCase());
+  const matchesSearch = device.device_id?.toLowerCase().trim().includes(searchTerm.toLowerCase()) || 
+                       device.device_name?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
+                       device.farm_name?.toLowerCase().trim().includes(searchTerm.toLowerCase());
   const matchesStatus = statusFilter === 'all' || 
                        (statusFilter === 'online' && device.motor_status === 1) ||
                        (statusFilter === 'offline' && device.motor_status === 0);

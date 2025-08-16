@@ -26,8 +26,8 @@
 
   // Filter gateways
   $: filteredGateways = gateways.filter(gateway => {
-    const matchesSearch = gateway.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         gateway.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = gateway.name?.toLowerCase().trim().includes(searchTerm.toLowerCase()) || 
+                         gateway.id?.toLowerCase().trim().includes(searchTerm.toLowerCase()) ||
                          gateway.seller_profiles?.business_name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || gateway.status === statusFilter;
     const matchesSeller = sellerFilter === 'all' || gateway.seller_id === sellerFilter;
