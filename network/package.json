@@ -1,0 +1,26 @@
+{
+  "name": "farmnetworks-dual-portal",
+  "version": "1.0.0",
+  "description": "FarmNetworks Dual Portal System - Seller and Admin Portals",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:seller\" \"npm run dev:admin\"",
+    "dev:seller": "cd seller && npm run dev",
+    "dev:admin": "cd admin && npm run dev",
+    "build": "npm run build:seller && npm run build:admin",
+    "build:seller": "cd seller && npm run build",
+    "build:admin": "cd admin && npm run build",
+    "install:all": "npm run install:seller && npm run install:admin",
+    "install:seller": "cd seller && npm install",
+    "install:admin": "cd admin && npm install",
+    "start": "concurrently \"npm run start:seller\" \"npm run start:admin\"",
+    "start:seller": "cd seller && npm start",
+    "start:admin": "cd admin && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["svelte", "sveltekit", "farmnetworks", "portal", "admin", "seller"],
+  "author": "FarmNetworks Team",
+  "license": "MIT"
+}

@@ -10,7 +10,7 @@
         isExporting, 
         error,
         earningsActions 
-    } from '$lib/stores/seller/dashboard.js';
+    } from '$lib/stores/dashboard.js';
     import { sellerStore } from '$lib/stores/sellerStore.js';
     import { supabase } from '$lib/supabase.js';
 

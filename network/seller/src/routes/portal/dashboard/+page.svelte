@@ -55,7 +55,7 @@
     }
     
     function navigateToAddMaster() {
-        goto('/seller/portal/add-master');
+        goto('/portal/add-master');
     }
 
     $: displayedMasters = showAllMasters ? $masters : $masters.slice(0, 2);

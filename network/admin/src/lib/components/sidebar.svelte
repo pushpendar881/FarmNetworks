@@ -11,7 +11,7 @@
     { label: 'Device Management', icon: '📱', href: '/admin/adminportal/devices' },
     { label: 'Seller Management', icon: '👥', href: '/admin/adminportal/sellers' },
     { label: 'Map View', icon: '🗺️', href: '/admin/adminportal/MapView' },
-  //   { label: 'Settings', icon: '⚙️', href: '/admin/adminportal/settings' }
+    { label: 'Earning', icon: '⚙️', href: '/admin/adminportal/earning' }
   ];
 
   let mounted = false;

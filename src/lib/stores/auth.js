@@ -874,64 +874,64 @@ signOut: async () => {
     }
   },
 
-  // ... (keeping other methods the same for brevity)
-  getAllSellerProfiles: async (options = {}) => {
-    if (!supabase) return { success: false, error: 'Supabase not initialized' };
-    
-    try {
-      const {
-        page = 1,
-        limit = 10,
-        search = '',
-        status = 'all',
-        sortBy = 'created_at',
-        sortOrder = 'desc'
-      } = options;
+    // ... (keeping other methods the same for brevity)
+    getAllSellerProfiles: async (options = {}) => {
+      if (!supabase) return { success: false, error: 'Supabase not initialized' };
       
-      let query = supabase
-        .from('user_profiles')
-        .select(`
-          *,
-          seller_profiles (*)
-        `, { count: 'exact' })
-        .eq('role', 'seller');
-      
-      // Add search filter
-      if (search) {
-        query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-      }
-      
-      // Add status filter
-      if (status !== 'all') {
-        query = query.eq('is_active', status === 'active');
-      }
-      
-      // Add sorting
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-      
-      // Add pagination
-      const from = (page - 1) * limit;
-      const to = from + limit - 1;
-      query = query.range(from, to);
-      
-      const { data, error, count } = await query;
-      
-      if (error) {
-        return { success: false, error: error.message };
-      }
-      
-      // Flatten the nested seller_profiles
-      const transformedData = data.map(item => ({
-        ...item,
-        ...(item.seller_profiles || {}),
-        seller_profiles: undefined
-      }));
-      
-      return { 
-        success: true, 
-        sellers: transformedData,
-        pagination: {
-          page,
+      try {
+        const {
+          page = 1,
+          limit = 10,
+          search = '',
+          status = 'all',
+          sortBy = 'created_at',
+          sortOrder = 'desc'
+        } = options;
+        
+        let query = supabase
+          .from('user_profiles')
+          .select(`
+            *,
+            seller_profiles (*)
+          `, { count: 'exact' })
+          .eq('role', 'seller');
+        
+        // Add search filter
+        if (search) {
+          query = query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
+        }
+        
+        // Add status filter
+        if (status !== 'all') {
+          query = query.eq('is_active', status === 'active');
+        }
+        
+        // Add sorting
+        query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+        
+        // Add pagination
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+        query = query.range(from, to);
+        
+        const { data, error, count } = await query;
+        
+        if (error) {
+          return { success: false, error: error.message };
+        }
+        
+        // Flatten the nested seller_profiles
+        const transformedData = data.map(item => ({
+          ...item,
+          ...(item.seller_profiles || {}),
+          seller_profiles: undefined
+        }));
+        
+        return { 
+          success: true, 
+          sellers: transformedData,
+          pagination: {
+            page,
           limit,
           total: count || 0,
           totalPages: Math.ceil((count || 0) / limit)

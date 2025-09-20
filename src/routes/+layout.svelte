@@ -1,15 +1,13 @@
 <script>
   import { onMount } from 'svelte';
   import { initializeAuth } from '$lib/stores/auth.js';
-  import { initializeAdminAuth } from '$lib/stores/adminAuth.js';
+  // Remove initializeAdminAuth from global initialization
   import '../app.css';
 
   onMount(async () => {
-    // Initialize both auth systems
-    await Promise.all([
-      initializeAuth(),
-      initializeAdminAuth()
-    ]);
+    // Only initialize the main auth system globally
+    // Admin auth will be initialized only in admin routes
+    await initializeAuth();
   });
 </script>
 

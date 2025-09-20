@@ -10,10 +10,10 @@
     let isOpen = false; // For mobile sidebar state
     
     const menuItems = [
-        { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/seller/portal/dashboard' },
-        { id: 'earnings', icon: '💰', label: 'Earnings', href: '/seller/portal/earnings' },
-        { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/seller/portal/map' },
-        { id: 'support', icon: '📞', label: 'Support', href: '/seller/portal/support' },
+        { id: 'dashboard', icon: '📊', label: 'Dashboard', href: '/portal/dashboard' },
+        { id: 'earnings', icon: '💰', label: 'Earnings', href: '/portal/earnings' },
+        { id: 'map', icon: '🗺️', label: 'Devices Map', href: '/portal/map' },
+        { id: 'support', icon: '📞', label: 'Support', href: '/portal/support' },
         { id: 'logout', icon: '🚪', label: 'Logout', action: 'logout' }
     ];
     
@@ -67,7 +67,7 @@
             await authStore.signOut();
         } catch (error) {
             console.error('Logout error:', error);
-            goto('/seller/auth/login');
+            goto('/auth/login');
         }
     }
     

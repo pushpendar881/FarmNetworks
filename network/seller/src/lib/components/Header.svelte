@@ -10,7 +10,7 @@
     }
     
     function navigateToProfile() {
-        goto('/seller/portal/profile');
+        goto('/portal/profile');
     }
 </script>
 
